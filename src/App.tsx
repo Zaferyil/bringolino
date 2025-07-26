@@ -56,13 +56,6 @@ class SupabaseService {
       return false;
     }
   }
-      console.log('🚀 Supabase initialized successfully');
-      return true;
-    } catch (error) {
-      console.error('❌ Supabase initialization failed:', error);
-      return false;
-    }
-  }
 
   // Save data with offline support using Supabase
   async saveData(path, data) {
@@ -393,33 +386,29 @@ const KrankenhausLogistikApp = () => {
 
   // ✅ REAL-TIME SYNC SETUP
   const startRealtimeSync = () => {
-    try {
-      // Listen to all departments data
-      supabaseService.listenToData('departments', (data) => {
-        if (data) {
-          setAllDepartmentData(data);
-          console.log('📡 Real-time update received:', Object.keys(data));
-        }
-      });
+    // Listen to all departments data
+    supabaseService.listenToData('departments', (data) => {
+      if (data) {
+        setAllDepartmentData(data);
+        console.log('📡 Real-time update received:', Object.keys(data));
+      }
+    });
 
-      // Listen to locked DECTs
-      supabaseService.listenToData('lockedDECTs', (data) => {
-        if (data) {
-          setLockedDECTs(data);
-          console.log('🔒 Locked DECTs updated:', data);
-        }
-      });
+    // Listen to locked DECTs
+    supabaseService.listenToData('lockedDECTs', (data) => {
+      if (data) {
+        setLockedDECTs(data);
+        console.log('🔒 Locked DECTs updated:', data);
+      }
+    });
 
-      // Listen to specific department data if needed
-      supabaseService.listenToData(`departments/${selectedDepartment}`, (data) => {
-        if (data && data.completedTasks) {
-          const newCompletedTasks = new Set(data.completedTasks);
-          setCompletedTasks(newCompletedTasks);
-        }
-      });
-    } catch (error) {
-      console.warn('⚠️ Real-time sync setup failed:', error);
-    }
+    // Listen to specific department data if needed
+    supabaseService.listenToData(`departments/${selectedDepartment}`, (data) => {
+      if (data && data.completedTasks) {
+        const newCompletedTasks = new Set(data.completedTasks);
+        setCompletedTasks(newCompletedTasks);
+      }
+    });
   };
 
   // ✅ SYNC DATA TO SUPABASE
