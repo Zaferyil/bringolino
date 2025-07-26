@@ -386,29 +386,33 @@ const KrankenhausLogistikApp = () => {
 
   // ✅ REAL-TIME SYNC SETUP
   const startRealtimeSync = () => {
-    // Listen to all departments data
-    supabaseService.listenToData('departments', (data) => {
-      if (data) {
-        setAllDepartmentData(data);
-        console.log('📡 Real-time update received:', Object.keys(data));
-      }
-    });
+    try {
+      // Listen to all departments data
+      supabaseService.listenToData('departments', (data) => {
+        if (data) {
+          setAllDepartmentData(data);
+          console.log('📡 Real-time update received:', Object.keys(data));
+        }
+      });
 
-    // Listen to locked DECTs
-    supabaseService.listenToData('lockedDECTs', (data) => {
-      if (data) {
-        setLockedDECTs(data);
-        console.log('🔒 Locked DECTs updated:', data);
-      }
-    });
+      // Listen to locked DECTs
+      supabaseService.listenToData('lockedDECTs', (data) => {
+        if (data) {
+          setLockedDECTs(data);
+          console.log('🔒 Locked DECTs updated:', data);
+        }
+      });
 
-    // Listen to specific department data if needed
-    supabaseService.listenToData(`departments/${selectedDepartment}`, (data) => {
-      if (data && data.completedTasks) {
-        const newCompletedTasks = new Set(data.completedTasks);
-        setCompletedTasks(newCompletedTasks);
-      }
-    });
+      // Listen to specific department data if needed
+      supabaseService.listenToData(`departments/${selectedDepartment}`, (data) => {
+        if (data && data.completedTasks) {
+          const newCompletedTasks = new Set(data.completedTasks);
+          setCompletedTasks(newCompletedTasks);
+        }
+      });
+    } catch (error) {
+      console.warn('⚠️ Real-time sync setup failed:', error);
+    }
   };
 
   // ✅ SYNC DATA TO SUPABASE
