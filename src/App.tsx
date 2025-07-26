@@ -23,15 +23,39 @@ class SupabaseService {
     this.isOnline = true;
     this.pendingWrites = [];
     this.retryTimeout = null;
+    this.initialized = false;
   }
 
   // Initialize Supabase connection
   async initialize() {
     try {
+      if (this.initialized) return true;
+      
       if (!isSupabaseConnected()) {
         console.log('⚠️ Supabase not connected - working offline');
         return false;
       }
+      
+      // Test connection with timeout
+      const testPromise = supabase.from('bringolino_tasks').select('count').limit(1);
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Connection timeout')), 5000)
+      );
+      
+      try {
+        await Promise.race([testPromise, timeoutPromise]);
+        this.initialized = true;
+        console.log('🚀 Supabase initialized successfully');
+        return true;
+      } catch (error) {
+        console.log('⚠️ Supabase connection test failed, working offline');
+        return false;
+      }
+    } catch (error) {
+      console.error('❌ Supabase initialization failed:', error);
+      return false;
+    }
+  }
       console.log('🚀 Supabase initialized successfully');
       return true;
     } catch (error) {
@@ -260,23 +284,29 @@ const KrankenhausLogistikApp = () => {
   useEffect(() => {
     const initSupabase = async () => {
       console.log('🚀 Initializing Supabase for DECT:', selectedDepartment);
-      const success = await supabaseService.initialize();
-      if (success) {
-        setSupabaseStatus('connected');
-        setIsSupabaseReady(true);
-        console.log(`🚀 Supabase connected - Auto-sync for DECT ${selectedDepartment}!`);
-        
-        // Start listening to all department data
-        startRealtimeSync();
-        
-        // Auto-sync current user's data immediately
-        syncCurrentUserData();
-        
-        // Retry any pending writes
-        supabaseService.retryPendingWrites();
-      } else {
+      
+      try {
+        const success = await supabaseService.initialize();
+        if (success) {
+          setSupabaseStatus('connected');
+          setIsSupabaseReady(true);
+          console.log(`🚀 Supabase connected - Auto-sync for DECT ${selectedDepartment}!`);
+          
+          // Start listening to all department data
+          startRealtimeSync();
+          
+          // Auto-sync current user's data immediately
+          syncCurrentUserData();
+          
+          // Retry any pending writes
+          supabaseService.retryPendingWrites();
+        } else {
+          setSupabaseStatus('disconnected');
+          console.log('⚠️ Supabase connection failed - Working offline');
+        }
+      } catch (error) {
+        console.error('❌ Supabase initialization error:', error);
         setSupabaseStatus('disconnected');
-        console.log('⚠️ Supabase connection failed - Working offline');
       }
     };
 
@@ -363,29 +393,33 @@ const KrankenhausLogistikApp = () => {
 
   // ✅ REAL-TIME SYNC SETUP
   const startRealtimeSync = () => {
-    // Listen to all departments data
-    supabaseService.listenToData('departments', (data) => {
-      if (data) {
-        setAllDepartmentData(data);
-        console.log('📡 Real-time update received:', Object.keys(data));
-      }
-    });
+    try {
+      // Listen to all departments data
+      supabaseService.listenToData('departments', (data) => {
+        if (data) {
+          setAllDepartmentData(data);
+          console.log('📡 Real-time update received:', Object.keys(data));
+        }
+      });
 
-    // Listen to locked DECTs
-    supabaseService.listenToData('lockedDECTs', (data) => {
-      if (data) {
-        setLockedDECTs(data);
-        console.log('🔒 Locked DECTs updated:', data);
-      }
-    });
+      // Listen to locked DECTs
+      supabaseService.listenToData('lockedDECTs', (data) => {
+        if (data) {
+          setLockedDECTs(data);
+          console.log('🔒 Locked DECTs updated:', data);
+        }
+      });
 
-    // Listen to specific department data if needed
-    supabaseService.listenToData(`departments/${selectedDepartment}`, (data) => {
-      if (data && data.completedTasks) {
-        const newCompletedTasks = new Set(data.completedTasks);
-        setCompletedTasks(newCompletedTasks);
-      }
-    });
+      // Listen to specific department data if needed
+      supabaseService.listenToData(`departments/${selectedDepartment}`, (data) => {
+        if (data && data.completedTasks) {
+          const newCompletedTasks = new Set(data.completedTasks);
+          setCompletedTasks(newCompletedTasks);
+        }
+      });
+    } catch (error) {
+      console.warn('⚠️ Real-time sync setup failed:', error);
+    }
   };
 
   // ✅ SYNC DATA TO SUPABASE

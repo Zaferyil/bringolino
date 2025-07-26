@@ -1,10 +1,21 @@
 import { createClient } from '@supabase/supabase-js'
 
-// Supabase configuration - will be set when user connects
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || ''
-const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY || ''
+// Supabase configuration - safe initialization
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://placeholder.supabase.co'
+const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'placeholder-key'
 
-export const supabase = createClient(supabaseUrl, supabaseKey)
+// Safe Supabase client creation
+export const supabase = createClient(supabaseUrl, supabaseKey, {
+  auth: {
+    persistSession: false,
+    autoRefreshToken: false
+  },
+  realtime: {
+    params: {
+      eventsPerSecond: 2
+    }
+  }
+})
 
 // Task interface - same as before
 export interface BringolinoTask {
