@@ -1,3 +1,99 @@
+  async initialize() {
+    try {
+      console.log('🔥 Firebase Firestore initialized successfully');
+      return true;
+    } catch (error) {
+      console.error('❌ Firebase initialization failed:', error);
+      return false;
+    }
+  }
+
+  // Save data with offline support
+  async saveData(path, data) {
+    try {
+      const docRef = doc(db, ...path.split('/'));
+      await setDoc(docRef, data, { merge: true });
+      console.log(`✅ Saved to Firestore: ${path}`);
+      return true;
+    } catch (error) {
+      console.warn(`⚠️ Firestore save failed: ${error.message}`);
+      this.pendingWrites.push({ path, data, timestamp: Date.now() });
+      return false;
+    }
+  }
+
+  // Update specific fields
+  async updateData(path, data) {
+    try {
+      const docRef = doc(db, ...path.split('/'));
+      await updateDoc(docRef, data);
+      console.log(`✅ Updated Firestore: ${path}`);
+      return true;
+    } catch (error) {
+      console.warn(`⚠️ Firestore update failed: ${error.message}`);
+      this.pendingWrites.push({ path, data, timestamp: Date.now(), isUpdate: true });
+      return false;
+    }
+  }
+
+  // Listen to real-time data changes
+  listenToData(path, callback) {
+    const docRef = doc(db, ...path.split('/'));
+    return onSnapshot(docRef, (doc) => {
+      if (doc.exists()) {
+        callback(doc.data());
+      } else {
+        callback(null);
+      }
+    });
+  }
+
+  // Get data once
+  async getData(path) {
+    try {
+      const docRef = doc(db, ...path.split('/'));
+      const docSnap = await getDoc(docRef);
+      return docSnap.exists() ? docSnap.data() : null;
+    } catch (error) {
+      console.warn(`⚠️ Firestore read failed: ${error.message}`);
+      return null;
+    }
+  }
+
+  // Retry pending writes when back online
+  async retryPendingWrites() {
+    if (this.pendingWrites.length === 0) return;
+
+    console.log(`🔄 Retrying ${this.pendingWrites.length} pending writes...`);
+    
+    const writes = [...this.pendingWrites];
+    this.pendingWrites = [];
+
+    for (const write of writes) {
+      try {
+        if (write.isUpdate) {
+          await this.updateData(write.path, write.data);
+        } else {
+          await this.saveData(write.path, write.data);
+        }
+        console.log(`✅ Retry successful: ${write.path}`);
+      } catch (error) {
+        console.warn(`⚠️ Retry failed: ${write.path}`);
+        this.pendingWrites.push(write);
+      }
+    }
+  }
+
+  // Get connection status
+  isConnected() {
+    return navigator.onLine;
+  }
+
+  // Get pending writes count
+  getPendingWritesCount() {
+    return this.pendingWrites.length;
+  }
+}
 // ✅ YENİ: Generic check functions for all documentation types
   const toggleGenericCheck = (checkState, setCheckState, bauteil, station) => {
     const key = `${bauteil}-${station}`;
@@ -55,6 +151,15 @@
     if (count === 3) return '✓✓✓';
   };import React, { useState, useEffect } from 'react';
 import { Clock, CheckCircle, Circle, Calendar, Users, MapPin, AlertCircle, Menu, Home, BarChart3, Filter, Bell, X, Settings, TrendingUp, Award, Target, Zap, FileText, Check, Pill, Gift, Star, Coffee, Car, Plane, Wifi, WifiOff, Download, Smartphone, Database, Cloud, RotateCcw, Search } from 'lucide-react';
+import { 
+  addBringolinoTask, 
+  getBringolinoTasks, 
+  updateBringolinoTask, 
+  deleteBringolinoTask, 
+  listenToAllTasks,
+  db 
+} from './firebase';
+import { collection, doc, setDoc, getDoc, onSnapshot, updateDoc } from 'firebase/firestore';
 import { db, addBringolinoTask, getBringolinoTasks, updateBringolinoTask, deleteBringolinoTask, listenToAllTasks } from './firebase';
 
 // ✅ GERÇEK FIREBASE SERVICE CLASS - Firestore ile
@@ -9842,224 +9947,20 @@ const ModernDectSelectionPopup = ({ departments, taskTemplates, onSelectDect, on
           <button
             onClick={goToPrevious}
             disabled={currentIndex === 0}
+// ✅ REAL FIREBASE SERVICE CLASS
             className={`absolute left-2 top-1/2 transform -translate-y-1/2 z-20 w-8 h-8 rounded-full bg-white/90 backdrop-blur-xl shadow-lg flex items-center justify-center transition-all ${
-              currentIndex === 0 ? 'opacity-30' : 'hover:scale-110 hover:bg-gradient-to-r hover:from-indigo-100 hover:to-purple-100'
-            }`}
-          >
-            <svg className="w-4 h-4 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-            </svg>
-          </button>
-
-          <button
-            onClick={goToNext}
-            disabled={currentIndex === dectList.length - 1}
-            className={`absolute right-2 top-1/2 transform -translate-y-1/2 z-20 w-8 h-8 rounded-full bg-white/90 backdrop-blur-xl shadow-lg flex items-center justify-center transition-all ${
-              currentIndex === dectList.length - 1 ? 'opacity-30' : 'hover:scale-110 hover:bg-gradient-to-r hover:from-indigo-100 hover:to-purple-100'
-            }`}
-          >
-            <svg className="w-4 h-4 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-            </svg>
-          </button>
-
-          {/* Card Stack Container */}
-          <div className="relative px-6 pb-6">
-            {/* Card Stack Effect */}
-            {dectList.map((dect, index) => {
-              const offset = index - currentIndex;
-              const isVisible = Math.abs(offset) <= 1;
-              
-              if (!isVisible) return null;
-              
-              return (
-                <div
-                  key={dect[0]}
-                  className={`absolute inset-x-6 transition-all duration-500 ease-out ${
-                    offset === 0 
-                      ? 'z-10 transform translate-x-0 scale-100 opacity-100' 
-                      : offset > 0 
-                        ? 'z-5 transform translate-x-full scale-95 opacity-60'
-                        : 'z-5 transform -translate-x-full scale-95 opacity-60'
-                  }`}
-                  style={{
-                    transform: `translateX(${offset * 100}%) scale(${offset === 0 ? 1 : 0.95})`,
-                    opacity: offset === 0 ? 1 : 0.6,
-                    zIndex: offset === 0 ? 10 : 5
-                  }}
-                >
-                  {/* DECT Card */}
-                  <div className="text-center">
-                    {/* Icon with Gradient Background + Lock Overlay */}
-                    <div className={`relative mx-auto w-16 h-16 mb-3 rounded-2xl flex items-center justify-center shadow-xl ${
-                      isDECTLocked(dect[0])
-                        ? 'bg-gradient-to-br from-red-400 via-red-500 to-red-600'
-                        : 'bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500'
-                    }`}>
-                      <div className="text-2xl filter drop-shadow-lg">
-                        {getDectIcon(dect[0])}
-                      </div>
-                      {isDECTLocked(dect[0]) && (
-                        <>
-                          <div className="absolute -top-2 -right-2 w-6 h-6 bg-red-600 rounded-full flex items-center justify-center shadow-lg border-2 border-white">
-                            <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
-                              <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" />
-                            </svg>
-                          </div>
-                          {/* Debug indicator */}
-                          <div className="absolute -bottom-2 -left-2 w-4 h-4 bg-yellow-400 rounded-full flex items-center justify-center text-xs font-bold">
-                            🔒
-                          </div>
-                        </>
-                      )}
-                    </div>
-                    
-                    {/* DECT Info + Debug */}
-                    <h3 className={`text-xl font-bold mb-1 ${
-                      isDECTLocked(dect[0])
-                        ? 'bg-gradient-to-r from-red-600 to-red-800 bg-clip-text text-transparent'
-                        : 'bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent'
-                    }`}>
-                      DECT {dect[0]}
-                      {/* Debug info */}
-                      {isDECTLocked(dect[0]) && <span className="text-red-500 text-sm ml-2">🔒</span>}
-                    </h3>
-                    
-                    {isDECTLocked(dect[0]) && (
-                      <div className="mb-2 px-3 py-1 bg-red-100 border border-red-300 rounded-full">
-                        <div className="text-xs font-bold text-red-800">🔒 BEREITS BELEGT</div>
-                        <div className="text-xs text-red-600">
-                          {(() => {
-                            const lockInfo = getDECTLockInfo(dect[0]);
-                            return lockInfo ? `${lockInfo.userName} um ${lockInfo.lockTime}` : 'Belegt';
-                          })()}
-                        </div>
-                      </div>
-                    )}
-                    
-                    <p className={`text-sm mb-4 font-medium ${
-                      isDECTLocked(dect[0]) ? 'text-red-700' : 'text-gray-700'
-                    }`}>
-                      {dect[1]}
-                    </p>
-
-                    {/* Quick Stats with Gradients */}
-                    <div className="grid grid-cols-3 gap-2 mb-4">
-                      <div className={`border p-2 rounded-xl shadow-sm ${
-                        isDECTLocked(dect[0])
-                          ? 'bg-gradient-to-br from-red-50 to-red-100 border-red-200'
-                          : 'bg-gradient-to-br from-blue-50 to-indigo-100 border-blue-200'
-                      }`}>
-                        <div className={`text-sm font-bold bg-gradient-to-r bg-clip-text text-transparent ${
-                          isDECTLocked(dect[0])
-                            ? 'from-red-600 to-red-700'
-                            : 'from-blue-600 to-indigo-600'
-                        }`}>
-                          {(taskTemplates[dect[0]] || []).length}
-                        </div>
-                        <div className={`text-xs font-medium ${
-                          isDECTLocked(dect[0]) ? 'text-red-600' : 'text-blue-600'
-                        }`}>Tasks</div>
-                      </div>
-                      <div className={`border p-2 rounded-xl shadow-sm ${
-                        isDECTLocked(dect[0])
-                          ? 'bg-gradient-to-br from-red-50 to-red-100 border-red-200'
-                          : 'bg-gradient-to-br from-green-50 to-emerald-100 border-green-200'
-                      }`}>
-                        <div className={`text-sm font-bold bg-gradient-to-r bg-clip-text text-transparent ${
-                          isDECTLocked(dect[0])
-                            ? 'from-red-600 to-red-700'
-                            : 'from-green-600 to-emerald-600'
-                        }`}>
-                          {getDectStartTime(dect[0])}
-                        </div>
-                        <div className={`text-xs font-medium ${
-                          isDECTLocked(dect[0]) ? 'text-red-600' : 'text-green-600'
-                        }`}>Start</div>
-                      </div>
-                      <div className={`border p-2 rounded-xl shadow-sm ${
-                        isDECTLocked(dect[0])
-                          ? 'bg-gradient-to-br from-red-50 to-red-100 border-red-200'
-                          : 'bg-gradient-to-br from-orange-50 to-red-100 border-orange-200'
-                      }`}>
-                        <div className={`text-sm font-bold bg-gradient-to-r bg-clip-text text-transparent ${
-                          isDECTLocked(dect[0])
-                            ? 'from-red-600 to-red-700'
-                            : 'from-orange-600 to-red-600'
-                        }`}>
-                          {getDectPriority(dect[0])}
-                        </div>
-                        <div className={`text-xs font-medium ${
-                          isDECTLocked(dect[0]) ? 'text-red-600' : 'text-orange-600'
-                        }`}>Prio</div>
-                      </div>
-                    </div>
-
-                    {/* Select Button with Gradient */}
-                    <button
-                      onClick={() => {
-                        if (isDECTLocked(dect[0])) {
-                          const lockInfo = getDECTLockInfo(dect[0]);
-                          alert(`🔒 DECT ${dect[0]} ist bereits belegt!\n\nBelegt von: ${lockInfo?.userName || 'Unbekannt'}\nSeit: ${lockInfo?.lockTime || 'Unbekannt'}\n\nBitte wählen Sie einen anderen DECT.`);
-                          return;
-                        }
-                        onSelectDect(dect[0]);
-                      }}
-                      disabled={isDECTLocked(dect[0])}
-                      className={`w-full py-3 px-4 font-bold rounded-xl shadow-xl transform transition-all duration-300 ${
-                        isDECTLocked(dect[0])
-                          ? 'bg-gradient-to-r from-red-400 to-red-500 text-white opacity-60 cursor-not-allowed'
-                          : 'bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 text-white hover:shadow-2xl hover:scale-105'
-                      }`}
-                    >
-                      {isDECTLocked(dect[0]) ? '🔒 NICHT VERFÜGBAR' : '✨ Auswählen ✨'}
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
-            
-            {/* Spacer for proper height */}
-            <div className="opacity-0 pointer-events-none">
-              <div className="w-16 h-16 mb-3"></div>
-              <div className="h-6 mb-1"></div>
-              <div className="h-4 mb-4"></div>
-              <div className="grid grid-cols-3 gap-2 mb-4">
-                <div className="p-2 rounded-xl">
-                  <div className="h-4"></div>
-                  <div className="h-3"></div>
-                </div>
-                <div className="p-2 rounded-xl">
-                  <div className="h-4"></div>
-                  <div className="h-3"></div>
-                </div>
-                <div className="p-2 rounded-xl">
-                  <div className="h-4"></div>
-                  <div className="h-3"></div>
-                </div>
-              </div>
-              <div className="h-12"></div>
+class FirebaseService {
             </div>
+  constructor() {
           </div>
-
-          {/* Bottom Info with Debug */}
-          <div className="relative z-10 text-center pb-4 px-6">
-            <div className="text-xs bg-gradient-to-r from-gray-500 to-gray-600 bg-clip-text text-transparent mb-2 font-medium">
-              ← Swipe für mehr DECTs →
-            </div>
-            <div className="text-xs bg-gradient-to-r from-red-500 to-orange-500 bg-clip-text text-transparent font-bold">
-              ⚠️ Nach 1. Aufgabe gesperrt!
-            </div>
-            <div className="text-xs bg-gradient-to-r from-blue-500 to-purple-500 bg-clip-text text-transparent font-bold mt-1">
-              🔒 Rote DECTs sind bereits belegt
-            </div>
-            {/* Debug Panel */}
-            <div className="mt-2 text-xs bg-gray-100 p-2 rounded border">
-              <strong>🔧 Debug:</strong> Locked DECTs: {Object.keys(lockedDECTs).length === 0 ? 'None - All Available' : Object.keys(lockedDECTs).join(', ')}
-            </div>
-          </div>
+    this.isOnline = true;
         </div>
+    this.pendingWrites = [];
       </div>
+    this.retryTimeout = null;
     </div>
+  }
   );
+
 };
+  // Initialize Firebase connection
