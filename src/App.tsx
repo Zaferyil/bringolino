@@ -245,6 +245,10 @@ const KrankenhausLogistikApp = () => {
   const [isSupabaseReady, setIsSupabaseReady] = useState(false);
   const [lockedDECTs, setLockedDECTs] = useState({});
 
+  // ✅ SUPABASE CONNECTION STATUS
+  const [connectionStatus, setConnectionStatus] = useState('connecting');
+  const [lastSyncTime, setLastSyncTime] = useState(null);
+
   // ✅ YENİ: MAIN COMPONENT DECT LOCK FUNCTIONS
   const mainIsDECTLocked = (dectCode) => {
     const today = new Date().toDateString();
@@ -276,14 +280,17 @@ const KrankenhausLogistikApp = () => {
   // ✅ SUPABASE INITIALIZATION
   useEffect(() => {
     const initSupabase = async () => {
-      console.log('🚀 Initializing Supabase for DECT:', selectedDepartment);
+      console.log('🚀 Supabase bağlantısı kuruluyor...');
+      setConnectionStatus('connecting');
       
       try {
         const success = await supabaseService.initialize();
         if (success) {
+          setConnectionStatus('connected');
           setSupabaseStatus('connected');
           setIsSupabaseReady(true);
-          console.log(`🚀 Supabase connected - Auto-sync for DECT ${selectedDepartment}!`);
+          setLastSyncTime(new Date());
+          console.log(`🎉 Supabase başarıyla bağlandı! DECT ${selectedDepartment} hazır!`);
           
           // Start listening to all department data
           startRealtimeSync();
@@ -294,11 +301,13 @@ const KrankenhausLogistikApp = () => {
           // Retry any pending writes
           supabaseService.retryPendingWrites();
         } else {
+          setConnectionStatus('offline');
           setSupabaseStatus('disconnected');
-          console.log('⚠️ Supabase connection failed - Working offline');
+          console.log('⚠️ Offline modda çalışıyor');
         }
       } catch (error) {
         console.error('❌ Supabase initialization error:', error);
+        setConnectionStatus('error');
         setSupabaseStatus('disconnected');
       }
     };
@@ -314,11 +323,13 @@ const KrankenhausLogistikApp = () => {
       
       if (isConnected && supabaseStatus === 'disconnected') {
         setSupabaseStatus('connected');
-        console.log('🚀 Supabase reconnected - Auto-sync resumed!');
+        setConnectionStatus('connected');
+        console.log('🚀 Supabase yeniden bağlandı!');
         supabaseService.retryPendingWrites();
         syncCurrentUserData();
       } else if (!isConnected && supabaseStatus === 'connected') {
         setSupabaseStatus('disconnected');
+        setConnectionStatus('offline');
       }
     }, 2000);
 
@@ -629,8 +640,23 @@ const KrankenhausLogistikApp = () => {
                     <Clock className="w-3 h-3 mr-1" />
                     {getCurrentTime()}
                   </p>
-                  <div className="flex items-center">
-                    <Wifi className="w-3 h-3 text-green-500" />
+                  <div className="flex items-center space-x-1">
+                    {connectionStatus === 'connected' ? (
+                      <div className="flex items-center">
+                        <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse mr-1"></div>
+                        <Database className="w-3 h-3 text-green-500" />
+                      </div>
+                    ) : connectionStatus === 'connecting' ? (
+                      <div className="flex items-center">
+                        <div className="w-2 h-2 bg-yellow-500 rounded-full animate-pulse mr-1"></div>
+                        <RotateCcw className="w-3 h-3 text-yellow-500 animate-spin" />
+                      </div>
+                    ) : (
+                      <div className="flex items-center">
+                        <div className="w-2 h-2 bg-gray-400 rounded-full mr-1"></div>
+                        <WifiOff className="w-3 h-3 text-gray-400" />
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -665,6 +691,12 @@ const KrankenhausLogistikApp = () => {
             <h2 className="text-xl sm:text-2xl lg:text-3xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent mb-2">
               DECT {selectedDepartment}
             </h2>
+            {connectionStatus === 'connected' && (
+              <div className="flex items-center justify-center space-x-2 mb-2">
+                <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                <span className="text-xs text-green-600 font-medium">Supabase Aktif</span>
+              </div>
+            )}
             <p className="text-xs sm:text-sm text-gray-600 bg-gray-100 px-3 py-1 rounded-full inline-block">
               {new Date(selectedDate).toLocaleDateString('de-DE', {
                 weekday: 'long',
