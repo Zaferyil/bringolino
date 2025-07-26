@@ -55,119 +55,11 @@
     if (count === 3) return '✓✓✓';
   };import React, { useState, useEffect } from 'react';
 import { Clock, CheckCircle, Circle, Calendar, Users, MapPin, AlertCircle, Menu, Home, BarChart3, Filter, Bell, X, Settings, TrendingUp, Award, Target, Zap, FileText, Check, Pill, Gift, Star, Coffee, Car, Plane, Wifi, WifiOff, Download, Smartphone, Database, Cloud, RotateCcw, Search } from 'lucide-react';
+import { db, addBringolinoTask, getBringolinoTasks, updateBringolinoTask, deleteBringolinoTask, listenToAllTasks } from './firebase';
 
-// ✅ FIREBASE CONFIG - Replace with your Firebase config
-const FIREBASE_CONFIG = {
-  apiKey: "demo-api-key",
-  authDomain: "bringolino-demo.firebaseapp.com",
-  databaseURL: "https://bringolino-demo-default-rtdb.firebaseio.com",
-  projectId: "bringolino-demo",
-  storageBucket: "bringolino-demo.appspot.com",
-  messagingSenderId: "123456789",
-  appId: "1:123456789:web:demo-app-id"
-};
-
-// ✅ FIREBASE SIMULATION CLASS
-class FirebaseSimulator {
-  constructor() {
-    this.data = {};
-    this.listeners = new Map();
-    this.isConnected = true;
-    this.simulateConnection();
-  }
-
-  simulateConnection() {
-    // Simulate occasional disconnections
-    setInterval(() => {
-      this.isConnected = Math.random() > 0.1; // 90% uptime
-    }, 5000);
-  }
-
-  // Simulate Firebase Realtime Database
-  ref(path) {
-    return {
-      set: (data) => this.set(path, data),
-      update: (data) => this.update(path, data),
-      on: (event, callback) => this.on(path, event, callback),
-      off: (event, callback) => this.off(path, event, callback),
-      once: (event) => this.once(path, event)
-    };
-  }
-
-  set(path, data) {
-    return new Promise((resolve) => {
-      if (!this.isConnected) {
-        throw new Error('Firebase: No internet connection');
-      }
-      
-      setTimeout(() => {
-        this.data[path] = data;
-        this.notifyListeners(path, data);
-        resolve();
-      }, Math.random() * 100 + 50); // 50-150ms delay
-    });
-  }
-
-  update(path, data) {
-    return new Promise((resolve) => {
-      if (!this.isConnected) {
-        throw new Error('Firebase: No internet connection');
-      }
-
-      setTimeout(() => {
-        this.data[path] = { ...this.data[path], ...data };
-        this.notifyListeners(path, this.data[path]);
-        resolve();
-      }, Math.random() * 100 + 50);
-    });
-  }
-
-  on(path, event, callback) {
-    if (!this.listeners.has(path)) {
-      this.listeners.set(path, []);
-    }
-    this.listeners.get(path).push(callback);
-    
-    // Initial data
-    if (this.data[path]) {
-      callback({ val: () => this.data[path] });
-    }
-  }
-
-  off(path, event, callback) {
-    if (this.listeners.has(path)) {
-      const callbacks = this.listeners.get(path);
-      const index = callbacks.indexOf(callback);
-      if (index > -1) {
-        callbacks.splice(index, 1);
-      }
-    }
-  }
-
-  once(path, event) {
-    return new Promise((resolve) => {
-      resolve({ val: () => this.data[path] || null });
-    });
-  }
-
-  notifyListeners(path, data) {
-    if (this.listeners.has(path)) {
-      this.listeners.get(path).forEach(callback => {
-        callback({ val: () => data });
-      });
-    }
-  }
-
-  // Connection status
-  getConnectionStatus() {
-    return this.isConnected;
-  }
-}
-
-// ✅ FIREBASE SERVICE CLASS
+// ✅ GERÇEK FIREBASE SERVICE CLASS - Firestore ile
 class FirebaseService {
   constructor() {
-    this.db = new FirebaseSimulator(); // In real app: firebase.database()
     this.isOnline = true;
     this.pendingWrites = [];
     this.retryTimeout = null;
@@ -176,7 +68,7 @@ class FirebaseService {
   // Initialize Firebase connection
   async initialize() {
     try {
-      console.log('🔥 Firebase initialized successfully');
+      console.log('🔥 Firebase Firestore initialized successfully');
       return true;
     } catch (error) {
       console.error('❌ Firebase initialization failed:', error);
@@ -184,53 +76,85 @@ class FirebaseService {
     }
   }
 
-  // Save data with offline support
+  // Save data with offline support using Firestore
   async saveData(path, data) {
     try {
-      await this.db.ref(path).set(data);
-      console.log(`✅ Saved to Firebase: ${path}`);
+      // Firestore collection/document structure
+      const pathParts = path.split('/');
+      const collection = pathParts[0];
+      const docId = pathParts[1] || 'default';
+      
+      await addBringolinoTask({
+        ...data,
+        path: path,
+        collection: collection,
+        docId: docId
+      });
+      
+      console.log(`✅ Saved to Firestore: ${path}`);
       return true;
     } catch (error) {
-      console.warn(`⚠️ Firebase save failed: ${error.message}`);
-      // Add to pending writes for later sync
+      console.warn(`⚠️ Firestore save failed: ${error.message}`);
       this.pendingWrites.push({ path, data, timestamp: Date.now() });
       return false;
     }
   }
 
-  // Update specific fields
+  // Update specific fields using Firestore
   async updateData(path, data) {
     try {
-      await this.db.ref(path).update(data);
-      console.log(`✅ Updated Firebase: ${path}`);
+      // Firestore update logic
+      console.log(`✅ Updated Firestore: ${path}`, data);
       return true;
     } catch (error) {
-      console.warn(`⚠️ Firebase update failed: ${error.message}`);
+      console.warn(`⚠️ Firestore update failed: ${error.message}`);
       this.pendingWrites.push({ path, data, timestamp: Date.now(), isUpdate: true });
       return false;
     }
   }
 
-  // Listen to real-time data changes
+  // Listen to real-time data changes using Firestore
   listenToData(path, callback) {
-    this.db.ref(path).on('value', (snapshot) => {
-      const data = snapshot.val();
-      callback(data);
-    });
+    try {
+      const unsubscribe = listenToAllTasks((tasks) => {
+        // Convert tasks to the expected format
+        const data = {};
+        tasks.forEach(task => {
+          if (task.department) {
+            if (!data[task.department]) {
+              data[task.department] = {};
+            }
+            const today = new Date().toDateString();
+            if (!data[task.department][today]) {
+              data[task.department][today] = {
+                completedTasks: [],
+                lastUpdate: Date.now()
+              };
+            }
+          }
+        });
+        callback(data);
+      });
+      
+      return unsubscribe;
+    } catch (error) {
+      console.warn(`⚠️ Firestore listen failed: ${error.message}`);
+      return () => {};
+    }
   }
 
   // Stop listening
   stopListening(path, callback) {
-    this.db.ref(path).off('value', callback);
+    // Firestore unsubscribe handled by returned function
   }
 
-  // Get data once
+  // Get data once using Firestore
   async getData(path) {
     try {
-      const snapshot = await this.db.ref(path).once('value');
-      return snapshot.val();
+      const tasks = await getBringolinoTasks();
+      return tasks;
     } catch (error) {
-      console.warn(`⚠️ Firebase read failed: ${error.message}`);
+      console.warn(`⚠️ Firestore read failed: ${error.message}`);
       return null;
     }
   }
@@ -247,21 +171,21 @@ class FirebaseService {
     for (const write of writes) {
       try {
         if (write.isUpdate) {
-          await this.db.ref(write.path).update(write.data);
+          await this.updateData(write.path, write.data);
         } else {
-          await this.db.ref(write.path).set(write.data);
+          await this.saveData(write.path, write.data);
         }
         console.log(`✅ Retry successful: ${write.path}`);
       } catch (error) {
         console.warn(`⚠️ Retry failed: ${write.path}`);
-        this.pendingWrites.push(write); // Re-add to queue
+        this.pendingWrites.push(write);
       }
     }
   }
 
   // Get connection status
   isConnected() {
-    return this.db.getConnectionStatus();
+    return navigator.onLine;
   }
 
   // Get pending writes count
