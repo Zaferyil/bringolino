@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    
+    <!-- PWA için gerekli meta etiketleri -->
+    <meta name="theme-color" content="#4F46E5">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="Bringolino">
+    
+    <!-- Manifest linki -->
+    <link rel="manifest" href="/manifest.json">
+    
+    <!-- Apple touch icon -->
+    
+    <title>Bringolino</title>
+</head>
+<body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+    
+    <!-- Service Worker kaydı -->
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/sw.js')
+                    .then((registration) => {
+                        console.log('SW kayıt başarılı: ', registration);
+                    })
+                    .catch((registrationError) => {
+                        console.log('SW kayıt başarısız: ', registrationError);
+                    });
+            });
+        }
+    </script>
+</body>
+</html>
