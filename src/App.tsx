@@ -5,109 +5,136 @@ import {
   getBringolinoTasks, 
   updateBringolinoTask, 
   deleteBringolinoTask, 
-  listenToAllTasks,
-  db 
-} from './firebase';
-import { collection, doc, setDoc, getDoc, onSnapshot, updateDoc } from 'firebase/firestore';
+  saveDepartmentData,
+  getDepartmentData,
+  getAllDepartmentData,
+  subscribeToDepartmentData,
+  lockDECT,
+  unlockDECT,
+  getDECTLocks,
+  subscribeToDECTLocks,
+  isSupabaseConnected,
+  supabase
+} from './supabase';
 
-// ✅ GERÇEK FIREBASE SERVICE CLASS - Firestore ile
-class FirebaseService {
+// ✅ GERÇEK SUPABASE SERVICE CLASS - PostgreSQL ile
+class SupabaseService {
   constructor() {
     this.isOnline = true;
     this.pendingWrites = [];
     this.retryTimeout = null;
   }
 
-  // Initialize Firebase connection
+  // Initialize Supabase connection
   async initialize() {
     try {
-      console.log('🔥 Firebase Firestore initialized successfully');
+      if (!isSupabaseConnected()) {
+        console.log('⚠️ Supabase not connected - working offline');
+        return false;
+      }
+      console.log('🚀 Supabase initialized successfully');
       return true;
     } catch (error) {
-      console.error('❌ Firebase initialization failed:', error);
+      console.error('❌ Supabase initialization failed:', error);
       return false;
     }
   }
 
-  // Save data with offline support using Firestore
+  // Save data with offline support using Supabase
   async saveData(path, data) {
     try {
-      // Firestore collection/document structure
+      // Supabase table structure
       const pathParts = path.split('/');
-      const collection = pathParts[0];
-      const docId = pathParts[1] || 'default';
+      const table = pathParts[0];
       
-      await addBringolinoTask({
-        ...data,
-        path: path,
-        collection: collection,
-        docId: docId
-      });
+      if (table === 'departmentData') {
+        await saveDepartmentData(data);
+      }
       
-      console.log(`✅ Saved to Firestore: ${path}`);
+      console.log(`✅ Saved to Supabase: ${path}`);
       return true;
     } catch (error) {
-      console.warn(`⚠️ Firestore save failed: ${error.message}`);
+      console.warn(`⚠️ Supabase save failed: ${error.message}`);
       this.pendingWrites.push({ path, data, timestamp: Date.now() });
       return false;
     }
   }
 
-  // Update specific fields using Firestore
+  // Update specific fields using Supabase
   async updateData(path, data) {
     try {
-      // Firestore update logic
-      console.log(`✅ Updated Firestore: ${path}`, data);
+      // Supabase update logic
+      console.log(`✅ Updated Supabase: ${path}`, data);
       return true;
     } catch (error) {
-      console.warn(`⚠️ Firestore update failed: ${error.message}`);
+      console.warn(`⚠️ Supabase update failed: ${error.message}`);
       this.pendingWrites.push({ path, data, timestamp: Date.now(), isUpdate: true });
       return false;
     }
   }
 
-  // Listen to real-time data changes using Firestore
+  // Listen to real-time data changes using Supabase
   listenToData(path, callback) {
     try {
-      const unsubscribe = listenToAllTasks((tasks) => {
-        // Convert tasks to the expected format
-        const data = {};
-        tasks.forEach(task => {
-          if (task.department) {
-            if (!data[task.department]) {
-              data[task.department] = {};
+      if (path === 'departments') {
+        const unsubscribe = subscribeToDepartmentData((departmentData) => {
+          // Convert department data to the expected format
+          const data = {};
+          departmentData.forEach(dept => {
+            if (!data[dept.department]) {
+              data[dept.department] = {};
             }
-            const today = new Date().toDateString();
-            if (!data[task.department][today]) {
-              data[task.department][today] = {
-                completedTasks: [],
-                lastUpdate: Date.now()
-              };
-            }
-          }
+            data[dept.department][dept.date] = {
+              completedTasks: dept.completedTasks,
+              documentationChecks: dept.documentationChecks,
+              apothekeChecks: dept.apothekeChecks,
+              userPoints: dept.userPoints,
+              lastUpdate: dept.lastUpdate
+            };
+          });
+          callback(data);
         });
-        callback(data);
-      });
+        return unsubscribe;
+      }
       
-      return unsubscribe;
+      if (path === 'lockedDECTs') {
+        const unsubscribe = subscribeToDECTLocks((locks) => {
+          const lockData = {};
+          locks.forEach(lock => {
+            lockData[lock.dectCode] = {
+              userId: lock.userId,
+              userName: lock.userName,
+              lockTime: lock.lockTime,
+              lockDate: lock.lockDate
+            };
+          });
+          callback(lockData);
+        });
+        return unsubscribe;
+      }
+      
+      return () => {};
     } catch (error) {
-      console.warn(`⚠️ Firestore listen failed: ${error.message}`);
+      console.warn(`⚠️ Supabase listen failed: ${error.message}`);
       return () => {};
     }
   }
 
   // Stop listening
   stopListening(path, callback) {
-    // Firestore unsubscribe handled by returned function
+    // Supabase unsubscribe handled by returned function
   }
 
-  // Get data once using Firestore
+  // Get data once using Supabase
   async getData(path) {
     try {
-      const tasks = await getBringolinoTasks();
-      return tasks;
+      if (path === 'departments') {
+        const departmentData = await getAllDepartmentData();
+        return departmentData;
+      }
+      return null;
     } catch (error) {
-      console.warn(`⚠️ Firestore read failed: ${error.message}`);
+      console.warn(`⚠️ Supabase read failed: ${error.message}`);
       return null;
     }
   }
@@ -190,15 +217,15 @@ const KrankenhausLogistikApp = () => {
   const [kleiderbugelChecks, setKleiderbugelChecks] = useState({});
 
   // ✅ FIREBASE INTEGRATION
-  const [firebaseService] = useState(() => new FirebaseService());
-  const [firebaseStatus, setFirebaseStatus] = useState('disconnected');
-  const [firebaseLastSync, setFirebaseLastSync] = useState(null);
+  const [supabaseService] = useState(() => new SupabaseService());
+  const [supabaseStatus, setSupabaseStatus] = useState('disconnected');
+  const [supabaseLastSync, setSupabaseLastSync] = useState(null);
   const [pendingSync, setPendingSync] = useState(0);
-  const [showFirebaseStatus, setShowFirebaseStatus] = useState(false);
+  const [showSupabaseStatus, setShowSupabaseStatus] = useState(false);
 
-  // ✅ FIREBASE DATA SYNC
+  // ✅ SUPABASE DATA SYNC
   const [allDepartmentData, setAllDepartmentData] = useState({});
-  const [isFirebaseReady, setIsFirebaseReady] = useState(false);
+  const [isSupabaseReady, setIsSupabaseReady] = useState(false);
   const [lockedDECTs, setLockedDECTs] = useState({});
 
   // ✅ YENİ: MAIN COMPONENT DECT LOCK FUNCTIONS
@@ -229,15 +256,15 @@ const KrankenhausLogistikApp = () => {
     };
   };
 
-  // ✅ FIREBASE INITIALIZATION
+  // ✅ SUPABASE INITIALIZATION
   useEffect(() => {
-    const initFirebase = async () => {
-      console.log('🔥 Initializing Firebase for DECT:', selectedDepartment);
-      const success = await firebaseService.initialize();
+    const initSupabase = async () => {
+      console.log('🚀 Initializing Supabase for DECT:', selectedDepartment);
+      const success = await supabaseService.initialize();
       if (success) {
-        setFirebaseStatus('connected');
-        setIsFirebaseReady(true);
-        console.log(`🔥 Firebase connected - Auto-sync for DECT ${selectedDepartment}!`);
+        setSupabaseStatus('connected');
+        setIsSupabaseReady(true);
+        console.log(`🚀 Supabase connected - Auto-sync for DECT ${selectedDepartment}!`);
         
         // Start listening to all department data
         startRealtimeSync();
@@ -246,29 +273,29 @@ const KrankenhausLogistikApp = () => {
         syncCurrentUserData();
         
         // Retry any pending writes
-        firebaseService.retryPendingWrites();
+        supabaseService.retryPendingWrites();
       } else {
-        setFirebaseStatus('disconnected');
-        console.log('⚠️ Firebase connection failed - Working offline');
+        setSupabaseStatus('disconnected');
+        console.log('⚠️ Supabase connection failed - Working offline');
       }
     };
 
-    initFirebase();
+    initSupabase();
 
     // Monitor connection status
     const connectionMonitor = setInterval(() => {
-      const isConnected = firebaseService.isConnected();
-      const pending = firebaseService.getPendingWritesCount();
+      const isConnected = supabaseService.isConnected();
+      const pending = supabaseService.getPendingWritesCount();
       
       setPendingSync(pending);
       
-      if (isConnected && firebaseStatus === 'disconnected') {
-        setFirebaseStatus('connected');
-        console.log('🔥 Firebase reconnected - Auto-sync resumed!');
-        firebaseService.retryPendingWrites();
+      if (isConnected && supabaseStatus === 'disconnected') {
+        setSupabaseStatus('connected');
+        console.log('🚀 Supabase reconnected - Auto-sync resumed!');
+        supabaseService.retryPendingWrites();
         syncCurrentUserData();
-      } else if (!isConnected && firebaseStatus === 'connected') {
-        setFirebaseStatus('disconnected');
+      } else if (!isConnected && supabaseStatus === 'connected') {
+        setSupabaseStatus('disconnected');
       }
     }, 2000);
 
@@ -279,23 +306,25 @@ const KrankenhausLogistikApp = () => {
 
   // ✅ AUTO-SYNC CURRENT USER DATA
   const syncCurrentUserData = async () => {
-    if (!isFirebaseReady) return;
+    if (!isSupabaseReady) return;
     
     const today = new Date().toDateString();
+    const userId = getUserId();
     const currentUserData = {
+      department: selectedDepartment,
+      date: today,
       completedTasks: Array.from(completedTasks),
       documentationChecks: documentationChecks,
       apothekeChecks: apothekeChecks,
       userPoints: userPoints,
       lastUpdate: Date.now(),
-      department: selectedDepartment,
-      departmentName: departments[selectedDepartment],
       deviceId: getDeviceId(),
+      userId: userId
     };
 
     console.log(`📤 Auto-syncing data for DECT ${selectedDepartment}:`, currentUserData);
     
-    await syncToFirebase('userData', currentUserData);
+    await syncToSupabase('userData', currentUserData);
   };
 
   // ✅ DEVICE & USER IDENTIFICATION
@@ -319,23 +348,23 @@ const KrankenhausLogistikApp = () => {
 
   // ✅ AUTO-SYNC ON DATA CHANGES
   useEffect(() => {
-    if (isFirebaseReady) {
+    if (isSupabaseReady) {
       syncCurrentUserData();
     }
-  }, [completedTasks, documentationChecks, apothekeChecks, userPoints, kleiderbugelChecks, isFirebaseReady]);
+  }, [completedTasks, documentationChecks, apothekeChecks, userPoints, kleiderbugelChecks, isSupabaseReady]);
 
   // ✅ AUTO-SYNC ON DEPARTMENT CHANGE
   useEffect(() => {
-    if (isFirebaseReady) {
+    if (isSupabaseReady) {
       console.log(`🔄 Department changed to ${selectedDepartment} - Auto-syncing...`);
       syncCurrentUserData();
     }
-  }, [selectedDepartment, isFirebaseReady]);
+  }, [selectedDepartment, isSupabaseReady]);
 
   // ✅ REAL-TIME SYNC SETUP
   const startRealtimeSync = () => {
     // Listen to all departments data
-    firebaseService.listenToData('departments', (data) => {
+    supabaseService.listenToData('departments', (data) => {
       if (data) {
         setAllDepartmentData(data);
         console.log('📡 Real-time update received:', Object.keys(data));
@@ -343,7 +372,7 @@ const KrankenhausLogistikApp = () => {
     });
 
     // Listen to locked DECTs
-    firebaseService.listenToData('lockedDECTs', (data) => {
+    supabaseService.listenToData('lockedDECTs', (data) => {
       if (data) {
         setLockedDECTs(data);
         console.log('🔒 Locked DECTs updated:', data);
@@ -351,7 +380,7 @@ const KrankenhausLogistikApp = () => {
     });
 
     // Listen to specific department data if needed
-    firebaseService.listenToData(`departments/${selectedDepartment}`, (data) => {
+    supabaseService.listenToData(`departments/${selectedDepartment}`, (data) => {
       if (data && data.completedTasks) {
         const newCompletedTasks = new Set(data.completedTasks);
         setCompletedTasks(newCompletedTasks);
@@ -359,27 +388,19 @@ const KrankenhausLogistikApp = () => {
     });
   };
 
-  // ✅ SYNC DATA TO FIREBASE
-  const syncToFirebase = async (dataType, data) => {
-    if (!isFirebaseReady) return;
+  // ✅ SYNC DATA TO SUPABASE
+  const syncToSupabase = async (dataType, data) => {
+    if (!isSupabaseReady) return;
 
-    setFirebaseStatus('syncing');
+    setSupabaseStatus('syncing');
     
-    const today = new Date().toDateString();
-    const departmentPath = `departments/${selectedDepartment}/${today}`;
-    
-    const success = await firebaseService.updateData(departmentPath, {
-      [dataType]: data,
-      lastUpdate: Date.now(),
-      department: selectedDepartment,
-      departmentName: departments[selectedDepartment]
-    });
+    const success = await supabaseService.saveData('departmentData', data);
 
     if (success) {
-      setFirebaseStatus('connected');
-      setFirebaseLastSync(new Date());
+      setSupabaseStatus('connected');
+      setSupabaseLastSync(new Date());
     } else {
-      setFirebaseStatus('disconnected');
+      setSupabaseStatus('disconnected');
     }
     
     return success;
@@ -498,8 +519,8 @@ const KrankenhausLogistikApp = () => {
     
     setCompletedTasks(newCompletedTasks);
     
-    // ✅ FIREBASE SYNC
-    syncToFirebase('completedTasks', Array.from(newCompletedTasks));
+    // ✅ SUPABASE SYNC
+    syncToSupabase('completedTasks', Array.from(newCompletedTasks));
   };
 
   const getPriorityColor = (priority) => {
