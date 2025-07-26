@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Clock, CheckCircle, Circle, Calendar, Users, MapPin, AlertCircle, Menu, Home, BarChart3, Filter, Bell, X, Settings, TrendingUp, Award, Target, Zap, FileText, Check, Pill, Gift, Star, Coffee, Car, Plane, Wifi, WifiOff, Download, Smartphone, Database, Cloud, RotateCcw, Search } from 'lucide-react';
+import { Clock, CheckCircle, Circle, Calendar, Users, MapPin, AlertCircle, Menu, Home, BarChart3, Filter, Bell, X, Settings, TrendingUp, Award, Target, Zap, FileText, Check, Pill, Gift, Star, Coffee, Car, Plane, Wifi, WifiOff, Download, Smartphone, Database, Cloud, RotateCcw, Search, Plus, Trash2, Edit3, Save, ArrowLeft, User, Shield, Lock, Unlock, Activity, Eye, EyeOff } from 'lucide-react';
 import { 
   addBringolinoTask, 
   getBringolinoTasks, 
@@ -214,6 +214,10 @@ const KrankenhausLogistikApp = () => {
   const [documentationChecks, setDocumentationChecks] = useState({});
   const [apothekeChecks, setApothekeChecks] = useState({});
   const [userPoints, setUserPoints] = useState(0);
+  const [currentView, setCurrentView] = useState('tasks');
+  const [showLeiterDashboard, setShowLeiterDashboard] = useState(false);
+  const [showTaskManager, setShowTaskManager] = useState(false);
+  const [showDECTManager, setShowDECTManager] = useState(false);
 
   // ✅ YENİ DOKÜMANTASYON STATES
   const [showTransportNeu, setShowTransportNeu] = useState(false);
@@ -248,6 +252,18 @@ const KrankenhausLogistikApp = () => {
   // ✅ SUPABASE CONNECTION STATUS
   const [connectionStatus, setConnectionStatus] = useState('connecting');
   const [lastSyncTime, setLastSyncTime] = useState(null);
+
+  // Task Management States
+  const [allTasks, setAllTasks] = useState([]);
+  const [newTask, setNewTask] = useState({
+    title: '',
+    description: '',
+    priority: 'medium',
+    department: selectedDepartment,
+    location: '',
+    dueDate: ''
+  });
+  const [editingTask, setEditingTask] = useState(null);
 
   // ✅ YENİ: MAIN COMPONENT DECT LOCK FUNCTIONS
   const mainIsDECTLocked = (dectCode) => {
@@ -298,6 +314,9 @@ const KrankenhausLogistikApp = () => {
           // Auto-sync current user's data immediately
           syncCurrentUserData();
           
+          // Load all tasks
+          loadAllTasks();
+          
           // Retry any pending writes
           supabaseService.retryPendingWrites();
         } else {
@@ -337,6 +356,16 @@ const KrankenhausLogistikApp = () => {
       clearInterval(connectionMonitor);
     };
   }, [selectedDepartment]);
+
+  // Load all tasks from Supabase
+  const loadAllTasks = async () => {
+    try {
+      const tasks = await getBringolinoTasks();
+      setAllTasks(tasks);
+    } catch (error) {
+      console.error('Error loading tasks:', error);
+    }
+  };
 
   // ✅ AUTO-SYNC CURRENT USER DATA
   const syncCurrentUserData = async () => {
@@ -539,6 +568,59 @@ const KrankenhausLogistikApp = () => {
         condition: 'Nur Freitags (Feiertags um 14:00 Uhr)',
         estimatedDuration: '35 min'
       }
+    ],
+    '27522': [
+      {
+        id: 10,
+        time: '06:00',
+        title: 'Wäsche Verteilung',
+        description: 'Saubere Wäsche an alle Stationen verteilen',
+        location: 'Wäscherei zu Stationen',
+        priority: 'high',
+        estimatedDuration: '60 min'
+      },
+      {
+        id: 11,
+        time: '08:00',
+        title: 'Küchen Service',
+        description: 'Frühstück Service und Geschirr einsammeln',
+        location: 'Küche, Stationen',
+        priority: 'medium',
+        estimatedDuration: '45 min'
+      }
+    ],
+    '27525': [
+      {
+        id: 12,
+        time: '07:00',
+        title: 'Bauteil C Rundgang',
+        description: 'Alle Stationen in Bauteil C kontrollieren',
+        location: 'Bauteil C',
+        priority: 'high',
+        estimatedDuration: '40 min'
+      }
+    ],
+    '27529': [
+      {
+        id: 13,
+        time: '06:45',
+        title: 'Kindergarten Service',
+        description: 'Kindergarten Versorgung und Bauteil H Service',
+        location: 'Kindergarten, Bauteil H',
+        priority: 'high',
+        estimatedDuration: '50 min'
+      }
+    ],
+    '27530': [
+      {
+        id: 14,
+        time: '06:00',
+        title: 'Hauptmagazin Kontrolle',
+        description: 'Hauptmagazin kontrollieren und Bestellungen bearbeiten',
+        location: 'Hauptmagazin',
+        priority: 'high',
+        estimatedDuration: '90 min'
+      }
     ]
   };
 
@@ -621,67 +703,1102 @@ const KrankenhausLogistikApp = () => {
     return () => clearInterval(timer);
   }, []);
 
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-indigo-100 via-purple-50 to-pink-100 overflow-x-hidden relative">
-      {/* Header */}
-      <div className="sticky top-0 z-50 bg-white/80 backdrop-blur-xl border-b border-white/20 shadow-lg overflow-x-hidden">
-        <div className="px-2 sm:px-3 md:px-4 lg:px-6 py-3 max-w-full">
-          <div className="flex items-center justify-between w-full min-w-0">
-            <div className="flex items-center space-x-2 sm:space-x-3">
-              <div className="w-10 h-10 sm:w-12 sm:h-12 bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 rounded-2xl flex items-center justify-center shadow-lg">
-                <Home className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
+  // Add new task
+  const handleAddTask = async () => {
+    try {
+      const taskData = {
+        ...newTask,
+        status: 'pending'
+      };
+      
+      await addBringolinoTask(taskData);
+      await loadAllTasks();
+      
+      setNewTask({
+        title: '',
+        description: '',
+        priority: 'medium',
+        department: selectedDepartment,
+        location: '',
+        dueDate: ''
+      });
+      
+      setShowTaskManager(false);
+    } catch (error) {
+      console.error('Error adding task:', error);
+    }
+  };
+
+  // Update task
+  const handleUpdateTask = async () => {
+    try {
+      await updateBringolinoTask(editingTask.id, editingTask);
+      await loadAllTasks();
+      setEditingTask(null);
+    } catch (error) {
+      console.error('Error updating task:', error);
+    }
+  };
+
+  // Delete task
+  const handleDeleteTask = async (taskId) => {
+    try {
+      await deleteBringolinoTask(taskId);
+      await loadAllTasks();
+    } catch (error) {
+      console.error('Error deleting task:', error);
+    }
+  };
+
+  // DECT Lock/Unlock functions
+  const handleLockDECT = async (dectCode) => {
+    const userId = getUserId();
+    const userName = `User_${userId.slice(-4)}`;
+    
+    try {
+      await lockDECT(dectCode, userId, userName);
+      console.log(`🔒 DECT ${dectCode} locked by ${userName}`);
+    } catch (error) {
+      console.error('Error locking DECT:', error);
+    }
+  };
+
+  const handleUnlockDECT = async (dectCode) => {
+    try {
+      await unlockDECT(dectCode);
+      console.log(`🔓 DECT ${dectCode} unlocked`);
+    } catch (error) {
+      console.error('Error unlocking DECT:', error);
+    }
+  };
+
+  // Render different views based on currentView
+  const renderCurrentView = () => {
+    if (showMenu) {
+      return (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto">
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-2xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
+                  Menü
+                </h2>
+                <button
+                  onClick={() => setShowMenu(false)}
+                  className="p-2 rounded-xl bg-gray-100 hover:bg-gray-200 transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
               </div>
-              <div className="min-w-0">
-                <h1 className="text-lg sm:text-xl lg:text-2xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
-                  Bringolino
-                </h1>
-                <div className="flex items-center space-x-2">
-                  <p className="text-xs sm:text-sm text-gray-500 flex items-center">
-                    <Clock className="w-3 h-3 mr-1" />
-                    {getCurrentTime()}
-                  </p>
-                  <div className="flex items-center space-x-1">
-                    {connectionStatus === 'connected' ? (
-                      <div className="flex items-center">
-                        <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse mr-1"></div>
-                        <Database className="w-3 h-3 text-green-500" />
+
+              <div className="space-y-3">
+                {/* Department Selection */}
+                <div className="p-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-2xl border border-blue-200">
+                  <h3 className="font-bold text-blue-900 mb-3 flex items-center">
+                    <Smartphone className="w-4 h-4 mr-2" />
+                    DECT Auswahl
+                  </h3>
+                  <div className="grid grid-cols-1 gap-2">
+                    {Object.entries(departments).map(([code, name]) => (
+                      <button
+                        key={code}
+                        onClick={() => {
+                          setSelectedDepartment(code);
+                          setShowMenu(false);
+                        }}
+                        className={`p-3 rounded-xl text-left transition-all ${
+                          selectedDepartment === code
+                            ? 'bg-gradient-to-r from-indigo-500 to-purple-600 text-white shadow-lg'
+                            : 'bg-white hover:bg-gray-50 text-gray-700 border border-gray-200'
+                        }`}
+                      >
+                        <div className="font-bold">DECT {code}</div>
+                        <div className="text-xs opacity-80">{name}</div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Navigation Options */}
+                <div className="space-y-2">
+                  <button
+                    onClick={() => {
+                      setCurrentView('tasks');
+                      setShowMenu(false);
+                    }}
+                    className="w-full p-4 bg-gradient-to-r from-green-50 to-emerald-50 rounded-2xl border border-green-200 text-left hover:shadow-lg transition-all"
+                  >
+                    <div className="flex items-center">
+                      <CheckCircle className="w-5 h-5 text-green-600 mr-3" />
+                      <div>
+                        <div className="font-bold text-green-900">Aufgaben</div>
+                        <div className="text-xs text-green-700">Tägliche Aufgaben verwalten</div>
                       </div>
-                    ) : connectionStatus === 'connecting' ? (
-                      <div className="flex items-center">
-                        <div className="w-2 h-2 bg-yellow-500 rounded-full animate-pulse mr-1"></div>
-                        <RotateCcw className="w-3 h-3 text-yellow-500 animate-spin" />
+                    </div>
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      setShowDocumentation(true);
+                      setShowMenu(false);
+                    }}
+                    className="w-full p-4 bg-gradient-to-r from-blue-50 to-cyan-50 rounded-2xl border border-blue-200 text-left hover:shadow-lg transition-all"
+                  >
+                    <div className="flex items-center">
+                      <FileText className="w-5 h-5 text-blue-600 mr-3" />
+                      <div>
+                        <div className="font-bold text-blue-900">Dokumentation</div>
+                        <div className="text-xs text-blue-700">Checklisten und Protokolle</div>
                       </div>
-                    ) : (
-                      <div className="flex items-center">
-                        <div className="w-2 h-2 bg-gray-400 rounded-full mr-1"></div>
-                        <WifiOff className="w-3 h-3 text-gray-400" />
+                    </div>
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      setShowApotheke(true);
+                      setShowMenu(false);
+                    }}
+                    className="w-full p-4 bg-gradient-to-r from-purple-50 to-pink-50 rounded-2xl border border-purple-200 text-left hover:shadow-lg transition-all"
+                  >
+                    <div className="flex items-center">
+                      <Pill className="w-5 h-5 text-purple-600 mr-3" />
+                      <div>
+                        <div className="font-bold text-purple-900">Apotheke</div>
+                        <div className="text-xs text-purple-700">Medikamenten-Checks</div>
                       </div>
+                    </div>
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      setShowLeiterDashboard(true);
+                      setShowMenu(false);
+                    }}
+                    className="w-full p-4 bg-gradient-to-r from-orange-50 to-red-50 rounded-2xl border border-orange-200 text-left hover:shadow-lg transition-all"
+                  >
+                    <div className="flex items-center">
+                      <BarChart3 className="w-5 h-5 text-orange-600 mr-3" />
+                      <div>
+                        <div className="font-bold text-orange-900">Leiter Dashboard</div>
+                        <div className="text-xs text-orange-700">Übersicht aller Abteilungen</div>
+                      </div>
+                    </div>
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      setShowTaskManager(true);
+                      setShowMenu(false);
+                    }}
+                    className="w-full p-4 bg-gradient-to-r from-indigo-50 to-blue-50 rounded-2xl border border-indigo-200 text-left hover:shadow-lg transition-all"
+                  >
+                    <div className="flex items-center">
+                      <Plus className="w-5 h-5 text-indigo-600 mr-3" />
+                      <div>
+                        <div className="font-bold text-indigo-900">Aufgaben Verwalten</div>
+                        <div className="text-xs text-indigo-700">Neue Aufgaben erstellen</div>
+                      </div>
+                    </div>
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      setShowDECTManager(true);
+                      setShowMenu(false);
+                    }}
+                    className="w-full p-4 bg-gradient-to-r from-yellow-50 to-orange-50 rounded-2xl border border-yellow-200 text-left hover:shadow-lg transition-all"
+                  >
+                    <div className="flex items-center">
+                      <Lock className="w-5 h-5 text-yellow-600 mr-3" />
+                      <div>
+                        <div className="font-bold text-yellow-900">DECT Manager</div>
+                        <div className="text-xs text-yellow-700">DECT Geräte sperren/entsperren</div>
+                      </div>
+                    </div>
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      setShowRewards(true);
+                      setShowMenu(false);
+                    }}
+                    className="w-full p-4 bg-gradient-to-r from-yellow-50 to-amber-50 rounded-2xl border border-yellow-200 text-left hover:shadow-lg transition-all"
+                  >
+                    <div className="flex items-center">
+                      <Gift className="w-5 h-5 text-yellow-600 mr-3" />
+                      <div>
+                        <div className="font-bold text-yellow-900">Belohnungen</div>
+                        <div className="text-xs text-yellow-700">Punkte und Achievements</div>
+                      </div>
+                    </div>
+                  </button>
+                </div>
+
+                {/* Connection Status */}
+                <div className="p-4 bg-gradient-to-r from-gray-50 to-slate-50 rounded-2xl border border-gray-200">
+                  <h3 className="font-bold text-gray-900 mb-2 flex items-center">
+                    <Database className="w-4 h-4 mr-2" />
+                    Verbindungsstatus
+                  </h3>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-2">
+                      {connectionStatus === 'connected' ? (
+                        <>
+                          <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                          <span className="text-sm text-green-600 font-medium">Supabase Verbunden</span>
+                        </>
+                      ) : connectionStatus === 'connecting' ? (
+                        <>
+                          <div className="w-2 h-2 bg-yellow-500 rounded-full animate-pulse"></div>
+                          <span className="text-sm text-yellow-600 font-medium">Verbinde...</span>
+                        </>
+                      ) : (
+                        <>
+                          <div className="w-2 h-2 bg-gray-400 rounded-full"></div>
+                          <span className="text-sm text-gray-600 font-medium">Offline</span>
+                        </>
+                      )}
+                    </div>
+                    {lastSyncTime && (
+                      <span className="text-xs text-gray-500">
+                        {lastSyncTime.toLocaleTimeString('de-DE', { 
+                          hour: '2-digit', 
+                          minute: '2-digit' 
+                        })}
+                      </span>
                     )}
                   </div>
                 </div>
               </div>
             </div>
-            
-            <div className="flex items-center space-x-1 min-w-0">
-              <div className="bg-gradient-to-r from-yellow-400 via-orange-400 to-red-500 text-white px-2 sm:px-3 py-1.5 rounded-xl shadow-lg">
-                <div className="flex items-center space-x-1">
-                  <Star className="w-3 h-3 sm:w-4 sm:h-4" />
-                  <span className="font-bold text-xs sm:text-sm">{userPoints}</span>
+          </div>
+        </div>
+      );
+    }
+
+    if (showDocumentation) {
+      return (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto">
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-cyan-600 bg-clip-text text-transparent">
+                  Dokumentation & Checklisten
+                </h2>
+                <button
+                  onClick={() => setShowDocumentation(false)}
+                  className="p-2 rounded-xl bg-gray-100 hover:bg-gray-200 transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Transport Neu */}
+                <div className="p-4 bg-gradient-to-br from-blue-50 to-indigo-100 rounded-2xl border border-blue-200">
+                  <h3 className="font-bold text-blue-900 mb-3 flex items-center">
+                    <Car className="w-5 h-5 mr-2" />
+                    Transport Neu
+                  </h3>
+                  <div className="space-y-2">
+                    {['Fahrzeug Check', 'Route Planung', 'Ladung Sicherung'].map((item, index) => (
+                      <label key={index} className="flex items-center space-x-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={transportNeuChecks[item] || false}
+                          onChange={(e) => setTransportNeuChecks(prev => ({
+                            ...prev,
+                            [item]: e.target.checked
+                          }))}
+                          className="rounded border-blue-300 text-blue-600 focus:ring-blue-500"
+                        />
+                        <span className="text-sm text-blue-800">{item}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Transport Alt */}
+                <div className="p-4 bg-gradient-to-br from-green-50 to-emerald-100 rounded-2xl border border-green-200">
+                  <h3 className="font-bold text-green-900 mb-3 flex items-center">
+                    <Car className="w-5 h-5 mr-2" />
+                    Transport Alt
+                  </h3>
+                  <div className="space-y-2">
+                    {['Wartung Check', 'Reparatur Status', 'Ersatzteile'].map((item, index) => (
+                      <label key={index} className="flex items-center space-x-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={transportAltChecks[item] || false}
+                          onChange={(e) => setTransportAltChecks(prev => ({
+                            ...prev,
+                            [item]: e.target.checked
+                          }))}
+                          className="rounded border-green-300 text-green-600 focus:ring-green-500"
+                        />
+                        <span className="text-sm text-green-800">{item}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Medikamente Neu */}
+                <div className="p-4 bg-gradient-to-br from-purple-50 to-pink-100 rounded-2xl border border-purple-200">
+                  <h3 className="font-bold text-purple-900 mb-3 flex items-center">
+                    <Pill className="w-5 h-5 mr-2" />
+                    Medikamente Neu
+                  </h3>
+                  <div className="space-y-2">
+                    {['Lieferung Check', 'Temperatur Kontrolle', 'Verfallsdatum'].map((item, index) => (
+                      <label key={index} className="flex items-center space-x-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={medikamenteNeuChecks[item] || false}
+                          onChange={(e) => setMedikamenteNeuChecks(prev => ({
+                            ...prev,
+                            [item]: e.target.checked
+                          }))}
+                          className="rounded border-purple-300 text-purple-600 focus:ring-purple-500"
+                        />
+                        <span className="text-sm text-purple-800">{item}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Medikamente Alt */}
+                <div className="p-4 bg-gradient-to-br from-orange-50 to-red-100 rounded-2xl border border-orange-200">
+                  <h3 className="font-bold text-orange-900 mb-3 flex items-center">
+                    <Pill className="w-5 h-5 mr-2" />
+                    Medikamente Alt
+                  </h3>
+                  <div className="space-y-2">
+                    {['Entsorgung Check', 'Inventar Update', 'Dokumentation'].map((item, index) => (
+                      <label key={index} className="flex items-center space-x-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={medikamenteAltChecks[item] || false}
+                          onChange={(e) => setMedikamenteAltChecks(prev => ({
+                            ...prev,
+                            [item]: e.target.checked
+                          }))}
+                          className="rounded border-orange-300 text-orange-600 focus:ring-orange-500"
+                        />
+                        <span className="text-sm text-orange-800">{item}</span>
+                      </label>
+                    ))}
+                  </div>
                 </div>
               </div>
-              
-              <button
-                onClick={() => setShowMenu(!showMenu)}
-                className="p-2 rounded-xl bg-gradient-to-r from-indigo-400 to-purple-400 text-white shadow-lg hover:scale-105 transition-transform"
-              >
-                <Menu className="w-4 h-4 sm:w-5 sm:h-5" />
-              </button>
+
+              <div className="mt-6 flex justify-end">
+                <button
+                  onClick={() => setShowDocumentation(false)}
+                  className="px-6 py-3 bg-gradient-to-r from-blue-500 to-cyan-600 text-white rounded-2xl font-bold hover:shadow-lg transition-all"
+                >
+                  Speichern
+                </button>
+              </div>
             </div>
           </div>
         </div>
-      </div>
+      );
+    }
 
-      {/* Main Content */}
+    if (showApotheke) {
+      return (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto">
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-2xl font-bold bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
+                  Apotheke Kontrollen
+                </h2>
+                <button
+                  onClick={() => setShowApotheke(false)}
+                  className="p-2 rounded-xl bg-gray-100 hover:bg-gray-200 transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Medikamenten Checks */}
+                <div className="p-6 bg-gradient-to-br from-purple-50 to-pink-100 rounded-2xl border border-purple-200">
+                  <h3 className="font-bold text-purple-900 mb-4 flex items-center">
+                    <Pill className="w-5 h-5 mr-2" />
+                    Medikamenten Kontrolle
+                  </h3>
+                  <div className="space-y-3">
+                    {[
+                      'Kühlschrank Temperatur (2-8°C)',
+                      'Verfallsdaten kontrolliert',
+                      'Lagerung korrekt',
+                      'Bestand aktualisiert',
+                      'Suchtgift versiegelt'
+                    ].map((item, index) => (
+                      <label key={index} className="flex items-center space-x-3 cursor-pointer p-2 rounded-lg hover:bg-white/50 transition-colors">
+                        <input
+                          type="checkbox"
+                          checked={apothekeChecks[item] || false}
+                          onChange={(e) => {
+                            const newChecks = {
+                              ...apothekeChecks,
+                              [item]: e.target.checked
+                            };
+                            setApothekeChecks(newChecks);
+                            
+                            if (e.target.checked) {
+                              setUserPoints(prev => prev + 10);
+                            } else {
+                              setUserPoints(prev => Math.max(0, prev - 10));
+                            }
+                          }}
+                          className="w-5 h-5 rounded border-purple-300 text-purple-600 focus:ring-purple-500"
+                        />
+                        <span className="text-sm text-purple-800 font-medium">{item}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Dokumentation */}
+                <div className="p-6 bg-gradient-to-br from-blue-50 to-indigo-100 rounded-2xl border border-blue-200">
+                  <h3 className="font-bold text-blue-900 mb-4 flex items-center">
+                    <FileText className="w-5 h-5 mr-2" />
+                    Dokumentation
+                  </h3>
+                  <div className="space-y-3">
+                    {[
+                      'Eingangskontrolle dokumentiert',
+                      'Temperaturlog ausgefüllt',
+                      'Inventarliste aktualisiert',
+                      'Abgabe protokolliert',
+                      'Tagesabschluss erstellt'
+                    ].map((item, index) => (
+                      <label key={index} className="flex items-center space-x-3 cursor-pointer p-2 rounded-lg hover:bg-white/50 transition-colors">
+                        <input
+                          type="checkbox"
+                          checked={documentationChecks[item] || false}
+                          onChange={(e) => {
+                            const newChecks = {
+                              ...documentationChecks,
+                              [item]: e.target.checked
+                            };
+                            setDocumentationChecks(newChecks);
+                            
+                            if (e.target.checked) {
+                              setUserPoints(prev => prev + 10);
+                            } else {
+                              setUserPoints(prev => Math.max(0, prev - 10));
+                            }
+                          }}
+                          className="w-5 h-5 rounded border-blue-300 text-blue-600 focus:ring-blue-500"
+                        />
+                        <span className="text-sm text-blue-800 font-medium">{item}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-6 flex justify-end space-x-3">
+                <button
+                  onClick={() => setShowApotheke(false)}
+                  className="px-6 py-3 bg-gray-200 text-gray-700 rounded-2xl font-bold hover:bg-gray-300 transition-colors"
+                >
+                  Abbrechen
+                </button>
+                <button
+                  onClick={() => setShowApotheke(false)}
+                  className="px-6 py-3 bg-gradient-to-r from-purple-500 to-pink-600 text-white rounded-2xl font-bold hover:shadow-lg transition-all"
+                >
+                  Speichern
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    if (showLeiterDashboard) {
+      return (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-6xl max-h-[90vh] overflow-y-auto">
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-2xl font-bold bg-gradient-to-r from-orange-600 to-red-600 bg-clip-text text-transparent">
+                  Leiter Dashboard - Übersicht aller Abteilungen
+                </h2>
+                <button
+                  onClick={() => setShowLeiterDashboard(false)}
+                  className="p-2 rounded-xl bg-gray-100 hover:bg-gray-200 transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Stats Overview */}
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                <div className="p-4 bg-gradient-to-br from-blue-50 to-indigo-100 rounded-2xl border border-blue-200">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="text-2xl font-bold text-blue-700">5</div>
+                      <div className="text-sm text-blue-600">Aktive DECTs</div>
+                    </div>
+                    <Smartphone className="w-8 h-8 text-blue-500" />
+                  </div>
+                </div>
+
+                <div className="p-4 bg-gradient-to-br from-green-50 to-emerald-100 rounded-2xl border border-green-200">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="text-2xl font-bold text-green-700">42</div>
+                      <div className="text-sm text-green-600">Erledigte Aufgaben</div>
+                    </div>
+                    <CheckCircle className="w-8 h-8 text-green-500" />
+                  </div>
+                </div>
+
+                <div className="p-4 bg-gradient-to-br from-yellow-50 to-orange-100 rounded-2xl border border-yellow-200">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="text-2xl font-bold text-yellow-700">1,250</div>
+                      <div className="text-sm text-yellow-600">Gesamt Punkte</div>
+                    </div>
+                    <Star className="w-8 h-8 text-yellow-500" />
+                  </div>
+                </div>
+
+                <div className="p-4 bg-gradient-to-br from-purple-50 to-pink-100 rounded-2xl border border-purple-200">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="text-2xl font-bold text-purple-700">87%</div>
+                      <div className="text-sm text-purple-600">Durchschnitt</div>
+                    </div>
+                    <TrendingUp className="w-8 h-8 text-purple-500" />
+                  </div>
+                </div>
+              </div>
+
+              {/* Department Performance */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div className="p-6 bg-gradient-to-br from-gray-50 to-slate-100 rounded-2xl border border-gray-200">
+                  <h3 className="font-bold text-gray-900 mb-4 flex items-center">
+                    <BarChart3 className="w-5 h-5 mr-2" />
+                    Abteilungs-Performance
+                  </h3>
+                  <div className="space-y-4">
+                    {Object.entries(departments).map(([code, name]) => {
+                      const dept = departmentPerformance.find(d => d.dept === code);
+                      const progress = dept ? (dept.rate / dept.tasks) * 100 : 0;
+                      
+                      return (
+                        <div key={code} className="p-4 bg-white rounded-xl border border-gray-200">
+                          <div className="flex items-center justify-between mb-2">
+                            <div>
+                              <div className="font-bold text-gray-900">DECT {code}</div>
+                              <div className="text-xs text-gray-600">{name}</div>
+                            </div>
+                            <div className="text-right">
+                              <div className="font-bold text-gray-900">{dept?.rate || 0}/{dept?.tasks || 0}</div>
+                              <div className="text-xs text-gray-600">{Math.round(progress)}%</div>
+                            </div>
+                          </div>
+                          <div className="w-full bg-gray-200 rounded-full h-2">
+                            <div 
+                              className="bg-gradient-to-r from-blue-500 to-purple-600 h-2 rounded-full transition-all duration-500"
+                              style={{ width: `${progress}%` }}
+                            ></div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Real-time Activity */}
+                <div className="p-6 bg-gradient-to-br from-green-50 to-emerald-100 rounded-2xl border border-green-200">
+                  <h3 className="font-bold text-green-900 mb-4 flex items-center">
+                    <Activity className="w-5 h-5 mr-2" />
+                    Live Aktivität
+                  </h3>
+                  <div className="space-y-3">
+                    <div className="flex items-center space-x-3 p-3 bg-white rounded-xl border border-green-200">
+                      <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                      <div className="flex-1">
+                        <div className="text-sm font-medium text-green-900">DECT 27527</div>
+                        <div className="text-xs text-green-700">Mopp "BT C" abgeschlossen</div>
+                      </div>
+                      <div className="text-xs text-green-600">vor 2 Min</div>
+                    </div>
+
+                    <div className="flex items-center space-x-3 p-3 bg-white rounded-xl border border-green-200">
+                      <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
+                      <div className="flex-1">
+                        <div className="text-sm font-medium text-green-900">DECT 27522</div>
+                        <div className="text-xs text-green-700">Wäsche Verteilung gestartet</div>
+                      </div>
+                      <div className="text-xs text-green-600">vor 5 Min</div>
+                    </div>
+
+                    <div className="flex items-center space-x-3 p-3 bg-white rounded-xl border border-green-200">
+                      <div className="w-2 h-2 bg-yellow-500 rounded-full animate-pulse"></div>
+                      <div className="flex-1">
+                        <div className="text-sm font-medium text-green-900">DECT 27530</div>
+                        <div className="text-xs text-green-700">Hauptmagazin Kontrolle läuft</div>
+                      </div>
+                      <div className="text-xs text-green-600">vor 8 Min</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-6 flex justify-end">
+                <button
+                  onClick={() => setShowLeiterDashboard(false)}
+                  className="px-6 py-3 bg-gradient-to-r from-orange-500 to-red-600 text-white rounded-2xl font-bold hover:shadow-lg transition-all"
+                >
+                  Dashboard Schließen
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    if (showTaskManager) {
+      return (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto">
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-2xl font-bold bg-gradient-to-r from-indigo-600 to-blue-600 bg-clip-text text-transparent">
+                  Aufgaben Verwalten
+                </h2>
+                <button
+                  onClick={() => setShowTaskManager(false)}
+                  className="p-2 rounded-xl bg-gray-100 hover:bg-gray-200 transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Add New Task Form */}
+              <div className="p-6 bg-gradient-to-br from-indigo-50 to-blue-100 rounded-2xl border border-indigo-200 mb-6">
+                <h3 className="font-bold text-indigo-900 mb-4 flex items-center">
+                  <Plus className="w-5 h-5 mr-2" />
+                  Neue Aufgabe Erstellen
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <input
+                    type="text"
+                    placeholder="Aufgaben Titel"
+                    value={newTask.title}
+                    onChange={(e) => setNewTask(prev => ({ ...prev, title: e.target.value }))}
+                    className="p-3 rounded-xl border border-indigo-300 focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  />
+                  <select
+                    value={newTask.priority}
+                    onChange={(e) => setNewTask(prev => ({ ...prev, priority: e.target.value }))}
+                    className="p-3 rounded-xl border border-indigo-300 focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  >
+                    <option value="low">Niedrig</option>
+                    <option value="medium">Mittel</option>
+                    <option value="high">Hoch</option>
+                    <option value="urgent">Dringend</option>
+                  </select>
+                  <input
+                    type="text"
+                    placeholder="Standort"
+                    value={newTask.location}
+                    onChange={(e) => setNewTask(prev => ({ ...prev, location: e.target.value }))}
+                    className="p-3 rounded-xl border border-indigo-300 focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  />
+                  <select
+                    value={newTask.department}
+                    onChange={(e) => setNewTask(prev => ({ ...prev, department: e.target.value }))}
+                    className="p-3 rounded-xl border border-indigo-300 focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  >
+                    {Object.entries(departments).map(([code, name]) => (
+                      <option key={code} value={code}>DECT {code} - {name}</option>
+                    ))}
+                  </select>
+                </div>
+                <textarea
+                  placeholder="Aufgaben Beschreibung"
+                  value={newTask.description}
+                  onChange={(e) => setNewTask(prev => ({ ...prev, description: e.target.value }))}
+                  className="w-full mt-4 p-3 rounded-xl border border-indigo-300 focus:ring-2 focus:ring-indigo-500 focus:border-transparent h-24 resize-none"
+                />
+                <button
+                  onClick={handleAddTask}
+                  disabled={!newTask.title || !newTask.description}
+                  className="mt-4 px-6 py-3 bg-gradient-to-r from-indigo-500 to-blue-600 text-white rounded-2xl font-bold hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Aufgabe Erstellen
+                </button>
+              </div>
+
+              {/* Existing Tasks List */}
+              <div className="space-y-4">
+                <h3 className="font-bold text-gray-900 flex items-center">
+                  <FileText className="w-5 h-5 mr-2" />
+                  Vorhandene Aufgaben ({allTasks.length})
+                </h3>
+                {allTasks.map((task) => (
+                  <div key={task.id} className="p-4 bg-white rounded-2xl border border-gray-200 shadow-sm">
+                    {editingTask?.id === task.id ? (
+                      <div className="space-y-3">
+                        <input
+                          type="text"
+                          value={editingTask.title}
+                          onChange={(e) => setEditingTask(prev => ({ ...prev, title: e.target.value }))}
+                          className="w-full p-2 rounded-lg border border-gray-300 focus:ring-2 focus:ring-indigo-500"
+                        />
+                        <textarea
+                          value={editingTask.description}
+                          onChange={(e) => setEditingTask(prev => ({ ...prev, description: e.target.value }))}
+                          className="w-full p-2 rounded-lg border border-gray-300 focus:ring-2 focus:ring-indigo-500 h-20 resize-none"
+                        />
+                        <div className="flex space-x-2">
+                          <button
+                            onClick={handleUpdateTask}
+                            className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors"
+                          >
+                            <Save className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => setEditingTask(null)}
+                            className="px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center space-x-2 mb-2">
+                            <h4 className="font-bold text-gray-900">{task.title}</h4>
+                            <span className={`px-2 py-1 rounded-full text-xs font-bold text-white ${
+                              task.priority === 'high' ? 'bg-red-500' :
+                              task.priority === 'medium' ? 'bg-yellow-500' :
+                              task.priority === 'low' ? 'bg-green-500' : 'bg-purple-500'
+                            }`}>
+                              {task.priority.toUpperCase()}
+                            </span>
+                            <span className="px-2 py-1 rounded-full text-xs font-bold bg-blue-100 text-blue-800">
+                              DECT {task.department}
+                            </span>
+                          </div>
+                          <p className="text-sm text-gray-600 mb-2">{task.description}</p>
+                          <div className="flex items-center text-xs text-gray-500">
+                            <MapPin className="w-3 h-3 mr-1" />
+                            {task.location}
+                          </div>
+                        </div>
+                        <div className="flex space-x-2 ml-4">
+                          <button
+                            onClick={() => setEditingTask(task)}
+                            className="p-2 bg-blue-100 text-blue-600 rounded-lg hover:bg-blue-200 transition-colors"
+                          >
+                            <Edit3 className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteTask(task.id)}
+                            className="p-2 bg-red-100 text-red-600 rounded-lg hover:bg-red-200 transition-colors"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    if (showDECTManager) {
+      return (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto">
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-2xl font-bold bg-gradient-to-r from-yellow-600 to-orange-600 bg-clip-text text-transparent">
+                  DECT Manager - Geräte Sperren/Entsperren
+                </h2>
+                <button
+                  onClick={() => setShowDECTManager(false)}
+                  className="p-2 rounded-xl bg-gray-100 hover:bg-gray-200 transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {Object.entries(departments).map(([code, name]) => {
+                  const isLocked = mainIsDECTLocked(code);
+                  const lockInfo = mainGetDECTLockInfo(code);
+                  
+                  return (
+                    <div key={code} className={`p-6 rounded-2xl border-2 transition-all ${
+                      isLocked 
+                        ? 'bg-gradient-to-br from-red-50 to-pink-100 border-red-200' 
+                        : 'bg-gradient-to-br from-green-50 to-emerald-100 border-green-200'
+                    }`}>
+                      <div className="flex items-center justify-between mb-4">
+                        <div>
+                          <h3 className="font-bold text-gray-900">DECT {code}</h3>
+                          <p className="text-xs text-gray-600">{name}</p>
+                        </div>
+                        {isLocked ? (
+                          <Lock className="w-6 h-6 text-red-500" />
+                        ) : (
+                          <Unlock className="w-6 h-6 text-green-500" />
+                        )}
+                      </div>
+
+                      {lockInfo && (
+                        <div className="mb-4 p-3 bg-white/50 rounded-xl">
+                          <div className="text-xs text-gray-600">Gesperrt von:</div>
+                          <div className="font-bold text-gray-900">{lockInfo.userName}</div>
+                          <div className="text-xs text-gray-500">um {lockInfo.lockTime}</div>
+                        </div>
+                      )}
+
+                      <div className="flex space-x-2">
+                        {!isLocked ? (
+                          <button
+                            onClick={() => handleLockDECT(code)}
+                            className="flex-1 px-4 py-2 bg-gradient-to-r from-red-500 to-pink-600 text-white rounded-xl font-bold hover:shadow-lg transition-all"
+                          >
+                            <Lock className="w-4 h-4 mr-2 inline" />
+                            Sperren
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => handleUnlockDECT(code)}
+                            disabled={lockInfo && lockInfo.userName !== `User_${getUserId().slice(-4)}`}
+                            className="flex-1 px-4 py-2 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-xl font-bold hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            <Unlock className="w-4 h-4 mr-2 inline" />
+                            Entsperren
+                          </button>
+                        )}
+                      </div>
+
+                      <div className={`mt-3 text-center text-xs font-bold ${
+                        isLocked ? 'text-red-600' : 'text-green-600'
+                      }`}>
+                        {isLocked ? 'GESPERRT' : 'VERFÜGBAR'}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="mt-6 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-2xl border border-blue-200">
+                <h3 className="font-bold text-blue-900 mb-2 flex items-center">
+                  <Shield className="w-4 h-4 mr-2" />
+                  Hinweise
+                </h3>
+                <ul className="text-sm text-blue-800 space-y-1">
+                  <li>• Gesperrte DECTs können nur vom Sperrenden entsperrt werden</li>
+                  <li>• Sperren werden täglich um Mitternacht automatisch aufgehoben</li>
+                  <li>• Nur ein DECT pro Benutzer kann gleichzeitig gesperrt werden</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    if (showRewards) {
+      return (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto">
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-2xl font-bold bg-gradient-to-r from-yellow-600 to-amber-600 bg-clip-text text-transparent">
+                  Belohnungen & Achievements
+                </h2>
+                <button
+                  onClick={() => setShowRewards(false)}
+                  className="p-2 rounded-xl bg-gray-100 hover:bg-gray-200 transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Current Points */}
+              <div className="text-center mb-8">
+                <div className="inline-flex items-center justify-center w-32 h-32 bg-gradient-to-r from-yellow-400 via-orange-400 to-red-500 rounded-full shadow-2xl mb-4">
+                  <div className="text-center text-white">
+                    <Star className="w-8 h-8 mx-auto mb-1" />
+                    <div className="text-2xl font-bold">{userPoints}</div>
+                    <div className="text-xs">Punkte</div>
+                  </div>
+                </div>
+                <h3 className="text-xl font-bold text-gray-900">Deine Punkte</h3>
+                <p className="text-sm text-gray-600">Sammle Punkte durch erledigte Aufgaben!</p>
+              </div>
+
+              {/* Achievements */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                <div className={`p-4 rounded-2xl border-2 transition-all ${
+                  userPoints >= 100 
+                    ? 'bg-gradient-to-br from-green-50 to-emerald-100 border-green-200' 
+                    : 'bg-gradient-to-br from-gray-50 to-slate-100 border-gray-200'
+                }`}>
+                  <div className="flex items-center space-x-3">
+                    <div className={`w-12 h-12 rounded-full flex items-center justify-center ${
+                      userPoints >= 100 ? 'bg-green-500' : 'bg-gray-400'
+                    }`}>
+                      <Target className="w-6 h-6 text-white" />
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-gray-900">Erste Schritte</h4>
+                      <p className="text-sm text-gray-600">100 Punkte erreichen</p>
+                      <div className="text-xs text-gray-500">
+                        {userPoints >= 100 ? '✅ Erreicht!' : `${userPoints}/100 Punkte`}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className={`p-4 rounded-2xl border-2 transition-all ${
+                  userPoints >= 500 
+                    ? 'bg-gradient-to-br from-blue-50 to-indigo-100 border-blue-200' 
+                    : 'bg-gradient-to-br from-gray-50 to-slate-100 border-gray-200'
+                }`}>
+                  <div className="flex items-center space-x-3">
+                    <div className={`w-12 h-12 rounded-full flex items-center justify-center ${
+                      userPoints >= 500 ? 'bg-blue-500' : 'bg-gray-400'
+                    }`}>
+                      <Zap className="w-6 h-6 text-white" />
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-gray-900">Fleißiger Helfer</h4>
+                      <p className="text-sm text-gray-600">500 Punkte erreichen</p>
+                      <div className="text-xs text-gray-500">
+                        {userPoints >= 500 ? '✅ Erreicht!' : `${userPoints}/500 Punkte`}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className={`p-4 rounded-2xl border-2 transition-all ${
+                  userPoints >= 1000 
+                    ? 'bg-gradient-to-br from-purple-50 to-pink-100 border-purple-200' 
+                    : 'bg-gradient-to-br from-gray-50 to-slate-100 border-gray-200'
+                }`}>
+                  <div className="flex items-center space-x-3">
+                    <div className={`w-12 h-12 rounded-full flex items-center justify-center ${
+                      userPoints >= 1000 ? 'bg-purple-500' : 'bg-gray-400'
+                    }`}>
+                      <Award className="w-6 h-6 text-white" />
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-gray-900">Experte</h4>
+                      <p className="text-sm text-gray-600">1000 Punkte erreichen</p>
+                      <div className="text-xs text-gray-500">
+                        {userPoints >= 1000 ? '✅ Erreicht!' : `${userPoints}/1000 Punkte`}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className={`p-4 rounded-2xl border-2 transition-all ${
+                  completedCount >= 10 
+                    ? 'bg-gradient-to-br from-yellow-50 to-orange-100 border-yellow-200' 
+                    : 'bg-gradient-to-br from-gray-50 to-slate-100 border-gray-200'
+                }`}>
+                  <div className="flex items-center space-x-3">
+                    <div className={`w-12 h-12 rounded-full flex items-center justify-center ${
+                      completedCount >= 10 ? 'bg-yellow-500' : 'bg-gray-400'
+                    }`}>
+                      <Coffee className="w-6 h-6 text-white" />
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-gray-900">Tagesmeister</h4>
+                      <p className="text-sm text-gray-600">10 Aufgaben an einem Tag</p>
+                      <div className="text-xs text-gray-500">
+                        {completedCount >= 10 ? '✅ Erreicht!' : `${completedCount}/10 Aufgaben`}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Rewards Shop */}
+              <div className="p-6 bg-gradient-to-br from-amber-50 to-yellow-100 rounded-2xl border border-amber-200">
+                <h3 className="font-bold text-amber-900 mb-4 flex items-center">
+                  <Gift className="w-5 h-5 mr-2" />
+                  Belohnungen Shop
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="p-4 bg-white rounded-xl border border-amber-200">
+                    <div className="text-center">
+                      <Coffee className="w-8 h-8 text-amber-600 mx-auto mb-2" />
+                      <h4 className="font-bold text-gray-900">Kaffee Gutschein</h4>
+                      <p className="text-sm text-gray-600 mb-2">Kostenloser Kaffee</p>
+                      <div className="text-lg font-bold text-amber-600">50 Punkte</div>
+                      <button 
+                        disabled={userPoints < 50}
+                        className="mt-2 px-4 py-2 bg-amber-500 text-white rounded-lg font-bold disabled:opacity-50 disabled:cursor-not-allowed hover:bg-amber-600 transition-colors"
+                      >
+                        Einlösen
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="p-4 bg-white rounded-xl border border-amber-200">
+                    <div className="text-center">
+                      <Car className="w-8 h-8 text-amber-600 mx-auto mb-2" />
+                      <h4 className="font-bold text-gray-900">Parkplatz VIP</h4>
+                      <p className="text-sm text-gray-600 mb-2">1 Tag VIP Parkplatz</p>
+                      <div className="text-lg font-bold text-amber-600">200 Punkte</div>
+                      <button 
+                        disabled={userPoints < 200}
+                        className="mt-2 px-4 py-2 bg-amber-500 text-white rounded-lg font-bold disabled:opacity-50 disabled:cursor-not-allowed hover:bg-amber-600 transition-colors"
+                      >
+                        Einlösen
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="p-4 bg-white rounded-xl border border-amber-200">
+                    <div className="text-center">
+                      <Plane className="w-8 h-8 text-amber-600 mx-auto mb-2" />
+                      <h4 className="font-bold text-gray-900">Extra Urlaubstag</h4>
+                      <p className="text-sm text-gray-600 mb-2">1 zusätzlicher Urlaubstag</p>
+                      <div className="text-lg font-bold text-amber-600">1000 Punkte</div>
+                      <button 
+                        disabled={userPoints < 1000}
+                        className="mt-2 px-4 py-2 bg-amber-500 text-white rounded-lg font-bold disabled:opacity-50 disabled:cursor-not-allowed hover:bg-amber-600 transition-colors"
+                      >
+                        Einlösen
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // Default Tasks View
+    return (
       <div className="px-3 sm:px-4 md:px-6 lg:px-8 py-4 sm:py-6 max-w-7xl mx-auto">
         {/* Progress Card */}
         <div className="bg-white/70 backdrop-blur-xl rounded-3xl shadow-2xl border border-white/30 p-4 sm:p-6 mb-4 sm:mb-6 relative overflow-hidden">
@@ -758,6 +1875,26 @@ const KrankenhausLogistikApp = () => {
               <div className="text-xs text-orange-600 font-medium">Offen</div>
             </div>
           </div>
+        </div>
+
+        {/* Filter Options */}
+        <div className="flex flex-wrap gap-2 mb-4 sm:mb-6">
+          {['all', 'high', 'medium', 'low', 'break'].map((priority) => (
+            <button
+              key={priority}
+              onClick={() => setFilterPriority(priority)}
+              className={`px-3 sm:px-4 py-2 rounded-xl font-bold text-xs sm:text-sm transition-all ${
+                filterPriority === priority
+                  ? 'bg-gradient-to-r from-indigo-500 to-purple-600 text-white shadow-lg'
+                  : 'bg-white/70 text-gray-700 hover:bg-white hover:shadow-md'
+              }`}
+            >
+              {priority === 'all' ? 'Alle' :
+               priority === 'high' ? 'Hoch' :
+               priority === 'medium' ? 'Mittel' :
+               priority === 'low' ? 'Niedrig' : 'Pause'}
+            </button>
+          ))}
         </div>
 
         {/* Tasks List */}
@@ -859,6 +1996,71 @@ const KrankenhausLogistikApp = () => {
 
         <div className="h-24 sm:h-24 lg:h-20"></div>
       </div>
+    );
+  };
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-indigo-100 via-purple-50 to-pink-100 overflow-x-hidden relative">
+      {/* Header */}
+      <div className="sticky top-0 z-50 bg-white/80 backdrop-blur-xl border-b border-white/20 shadow-lg overflow-x-hidden">
+        <div className="px-2 sm:px-3 md:px-4 lg:px-6 py-3 max-w-full">
+          <div className="flex items-center justify-between w-full min-w-0">
+            <div className="flex items-center space-x-2 sm:space-x-3">
+              <div className="w-10 h-10 sm:w-12 sm:h-12 bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 rounded-2xl flex items-center justify-center shadow-lg">
+                <Home className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
+              </div>
+              <div className="min-w-0">
+                <h1 className="text-lg sm:text-xl lg:text-2xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
+                  Bringolino
+                </h1>
+                <div className="flex items-center space-x-2">
+                  <p className="text-xs sm:text-sm text-gray-500 flex items-center">
+                    <Clock className="w-3 h-3 mr-1" />
+                    {getCurrentTime()}
+                  </p>
+                  <div className="flex items-center space-x-1">
+                    {connectionStatus === 'connected' ? (
+                      <div className="flex items-center">
+                        <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse mr-1"></div>
+                        <Database className="w-3 h-3 text-green-500" />
+                      </div>
+                    ) : connectionStatus === 'connecting' ? (
+                      <div className="flex items-center">
+                        <div className="w-2 h-2 bg-yellow-500 rounded-full animate-pulse mr-1"></div>
+                        <RotateCcw className="w-3 h-3 text-yellow-500 animate-spin" />
+                      </div>
+                    ) : (
+                      <div className="flex items-center">
+                        <div className="w-2 h-2 bg-gray-400 rounded-full mr-1"></div>
+                        <WifiOff className="w-3 h-3 text-gray-400" />
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            <div className="flex items-center space-x-1 min-w-0">
+              <div className="bg-gradient-to-r from-yellow-400 via-orange-400 to-red-500 text-white px-2 sm:px-3 py-1.5 rounded-xl shadow-lg">
+                <div className="flex items-center space-x-1">
+                  <Star className="w-3 h-3 sm:w-4 sm:h-4" />
+                  <span className="font-bold text-xs sm:text-sm">{userPoints}</span>
+                </div>
+              </div>
+              
+              <button
+                onClick={() => setShowMenu(!showMenu)}
+                className="p-2 rounded-xl bg-gradient-to-r from-indigo-400 to-purple-400 text-white shadow-lg hover:scale-105 transition-transform"
+              >
+                <Menu className="w-4 h-4 sm:w-5 sm:h-5" />
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Main Content */}
+      {renderCurrentView()}
     </div>
   );
 };
