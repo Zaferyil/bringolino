@@ -1,6 +1,5 @@
 import { initializeApp } from "firebase/app";
-import { getFirestore, collection, addDoc, getDocs, doc, updateDoc, deleteDoc, onSnapshot } from 'firebase/firestore';
-
+import { getFirestore, collection, addDoc, getDocs, doc, updateDoc, deleteDoc, onSnapshot, query, orderBy } from 'firebase/firestore';
 import { getAuth } from 'firebase/auth';
 
 const firebaseConfig = {
@@ -17,8 +16,23 @@ const app = initializeApp(firebaseConfig);
 export const db = getFirestore(app);
 export const auth = getAuth(app);
 
+// Task interface
+export interface BringolinoTask {
+  id?: string;
+  title: string;
+  description: string;
+  priority: 'low' | 'medium' | 'high' | 'urgent';
+  status: 'pending' | 'in-progress' | 'completed';
+  assignedTo?: string;
+  department: string;
+  location: string;
+  dueDate?: Date;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
 // Bringolino için özel functions
-export const addBringolinoTask = async (task: any) => {
+export const addBringolinoTask = async (task: Omit<BringolinoTask, 'id' | 'createdAt' | 'updatedAt'>) => {
   try {
     const docRef = await addDoc(collection(db, "bringolino_tasks"), {
       ...task,
@@ -28,23 +42,33 @@ export const addBringolinoTask = async (task: any) => {
     return docRef.id;
   } catch (e) {
     console.error("Error adding task: ", e);
+    throw e;
   }
 };
 
-export const getBringolinoTasks = async () => {
+export const getBringolinoTasks = async (): Promise<BringolinoTask[]> => {
   try {
-    const querySnapshot = await getDocs(collection(db, "bringolino_tasks"));
-    const tasks: any[] = [];
+    const q = query(collection(db, "bringolino_tasks"), orderBy("createdAt", "desc"));
+    const querySnapshot = await getDocs(q);
+    const tasks: BringolinoTask[] = [];
     querySnapshot.forEach((doc) => {
-      tasks.push({ id: doc.id, ...doc.data() });
+      const data = doc.data();
+      tasks.push({ 
+        id: doc.id, 
+        ...data,
+        createdAt: data.createdAt?.toDate() || new Date(),
+        updatedAt: data.updatedAt?.toDate() || new Date(),
+        dueDate: data.dueDate?.toDate() || undefined
+      } as BringolinoTask);
     });
     return tasks;
   } catch (e) {
     console.error("Error getting tasks: ", e);
+    throw e;
   }
 };
 
-export const updateBringolinoTask = async (taskId: string, updates: any) => {
+export const updateBringolinoTask = async (taskId: string, updates: Partial<BringolinoTask>) => {
   try {
     await updateDoc(doc(db, "bringolino_tasks", taskId), {
       ...updates,
@@ -52,15 +76,34 @@ export const updateBringolinoTask = async (taskId: string, updates: any) => {
     });
   } catch (e) {
     console.error("Error updating task: ", e);
+    throw e;
   }
 };
-// Dashboard için task dinleme fonksiyonu
-export const listenToAllTasks = (callback: (tasks: any[]) => void) => {
+
+export const deleteBringolinoTask = async (taskId: string) => {
   try {
-    const unsubscribe = onSnapshot(collection(db, "bringolino_tasks"), (querySnapshot) => {
-      const tasks: any[] = [];
+    await deleteDoc(doc(db, "bringolino_tasks", taskId));
+  } catch (e) {
+    console.error("Error deleting task: ", e);
+    throw e;
+  }
+};
+
+// Dashboard için task dinleme fonksiyonu
+export const listenToAllTasks = (callback: (tasks: BringolinoTask[]) => void) => {
+  try {
+    const q = query(collection(db, "bringolino_tasks"), orderBy("createdAt", "desc"));
+    const unsubscribe = onSnapshot(q, (querySnapshot) => {
+      const tasks: BringolinoTask[] = [];
       querySnapshot.forEach((doc) => {
-        tasks.push({ id: doc.id, ...doc.data() });
+        const data = doc.data();
+        tasks.push({ 
+          id: doc.id, 
+          ...data,
+          createdAt: data.createdAt?.toDate() || new Date(),
+          updatedAt: data.updatedAt?.toDate() || new Date(),
+          dueDate: data.dueDate?.toDate() || undefined
+        } as BringolinoTask);
       });
       callback(tasks);
     });
